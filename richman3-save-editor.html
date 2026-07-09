@@ -1,0 +1,1516 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>大富翁3 存档修改器</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f6f8;
+      --panel: #fff;
+      --ink: #1d2430;
+      --muted: #667085;
+      --line: #d8dee8;
+      --primary: #136f63;
+      --danger: #a83333;
+      --warn: #9b5b00;
+      --chip: #eef4f2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 36px; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 16px; }
+    h1 { margin: 0; font-size: 28px; line-height: 1.15; letter-spacing: 0; }
+    h2 { margin: 0 0 12px; font-size: 17px; letter-spacing: 0; }
+    p { margin: 0; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 16px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, .file-label {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      min-height: 36px;
+      border-radius: 6px;
+      padding: 0 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button.primary, .file-label.primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+    button.warn { border-color: #e2b35f; background: #fff8ea; color: var(--warn); }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    input[type="file"] { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+    input[type="number"], input[type="text"], select {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font: inherit;
+      background: #fff;
+      color: var(--ink);
+    }
+    label, .field { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+    .fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+    .status { margin-top: 12px; min-height: 22px; color: var(--muted); }
+    .status strong { color: var(--ink); }
+    .status .ok { color: var(--primary); }
+    .status .danger { color: var(--danger); }
+    .download-area {
+      display: none;
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfd;
+    }
+    .download-area a { color: var(--primary); font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
+    th { color: var(--muted); font-size: 12px; font-weight: 600; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--primary);
+      font-size: 12px;
+    }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .card-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 8px;
+      background: #fff;
+    }
+    .card-line code { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    .small { font-size: 12px; color: var(--muted); }
+    .section-gap { margin-top: 16px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
+    .stock-table { min-width: 900px; table-layout: auto; }
+    .holding-table { min-width: 1320px; table-layout: auto; }
+    .stock-table th, .stock-table td { white-space: nowrap; }
+    .stock-table input { min-height: 30px; padding: 4px 6px; }
+    .stock-name { width: 120px; }
+    .stock-num { width: 78px; }
+    .stock-cost { width: 88px; }
+    .stock-small { width: 62px; }
+    .file-mini {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 12px;
+      background: #fff;
+      cursor: pointer;
+    }
+    @media (max-width: 880px) {
+      .grid, .fields, .cards { grid-template-columns: 1fr; }
+      header { align-items: start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>大富翁3 存档修改器</h1>
+      <p>离线单文件工具，直接双击本 HTML，选择存档即可使用。</p>
+    </div>
+    <div class="toolbar">
+      <label class="file-label primary" for="fileInput">选择存档</label>
+      <input id="fileInput" type="file" accept=".sav,.SAV,application/octet-stream">
+      <button id="openNative">高级打开</button>
+      <button id="saveDirect" class="primary" disabled>直接覆盖保存</button>
+      <button id="saveNative" disabled>保存 / 另存为</button>
+      <button id="download" disabled>下载修改版</button>
+      <button id="saveSettings">保存当前配置</button>
+      <button id="loadSettings">读取配置</button>
+      <span id="selectedFileName" class="chip">未选择存档</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>快速修改</h2>
+      <div class="fields">
+        <label><span>你的玩家槽位</span><select id="humanSlot"></select></label>
+        <label><span>我方现金</span><input id="cash" type="number" min="0" max="2147483647" value="178800"></label>
+        <label><span>我方存款</span><input id="bank" type="number" min="0" max="2147483647" value="0"></label>
+        <label><span>我方点券</span><input id="coupon" type="number" min="0" max="65535" value="65535"></label>
+      </div>
+      <div class="fields">
+        <label><span>8 种道具各放数量</span><input id="itemCount" type="number" min="0" max="999" value="99"></label>
+        <label><span>卡片池循环数量</span><input id="poolCount" type="number" min="0" max="107" value="107"></label>
+        <label><span>电脑起始槽位</span><select id="computerStart"></select></label>
+        <label><span>电脑数量</span><input id="computerCount" type="number" min="0" max="5" value="3"></label>
+      </div>
+      <div class="toolbar section-gap">
+        <button id="applyMoney" class="primary" disabled>修改金钱 / 点券</button>
+        <button id="applyCards" disabled>补满卡片</button>
+        <button id="applyItems" disabled>补满道具</button>
+        <button id="applyStatusCredit" disabled>清状态 / 信用</button>
+        <button id="clearComputers" class="warn" disabled>清空电脑卡片道具点券</button>
+      </div>
+      <div id="status" class="status">请选择存档。普通选择文件不能静默覆盖原文件，保存时会弹出系统窗口或生成下载链接。</div>
+      <div id="downloadArea" class="download-area"></div>
+    </section>
+
+    <section class="panel">
+      <h2>角色槽位</h2>
+      <table>
+        <thead>
+          <tr><th>槽</th><th>控制</th><th>现金</th><th>存款</th><th>点券</th><th>卡片</th></tr>
+        </thead>
+        <tbody id="players"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <section class="panel section-gap">
+    <h2>物价指数控制</h2>
+    <p class="small">物价指数按所有玩家平均资产计算，不是一个单独存档数值。物价友好模式只调整我方现金和股票，不清零过路费、不补贴电脑。</p>
+    <div class="fields">
+      <label><span>目标指数</span><input id="targetPriceIndex" type="number" min="0.1" max="99" step="0.1" value="1.5"></label>
+      <label><span>我方现金上限</span><input id="friendlyCashCap" type="number" min="0" max="2147483647" value="220000"></label>
+      <label><span>我方每股持仓上限</span><input id="friendlyStockCap" type="number" min="0" max="32767" value="1000"></label>
+      <label><span>模式说明</span><input type="text" value="只改我方，不改电脑和过路费" disabled></label>
+    </div>
+    <div class="toolbar section-gap">
+      <button id="estimatePriceIndex" disabled>估算物价指数</button>
+      <button id="capHumanLiquidAssets" disabled>限制我方现金/存款</button>
+      <button id="capHumanStockAssets" disabled>限制我方股票持仓</button>
+      <button id="priceFriendlyMode" class="primary" disabled>物价友好模式</button>
+    </div>
+    <div id="priceIndexStatus" class="status">载入存档后可估算。真实指数还可能包含土地等资产，游戏内显示为准。</div>
+  </section>
+
+  <section class="panel section-gap">
+    <h2>股票修改</h2>
+    <div class="fields">
+      <label><span>股票数量</span><input id="stockCount" type="number" min="1" max="22" value="16"></label>
+      <label><span>每支股票股数</span><input id="stockShares" type="number" min="0" max="32767" value="9999"></label>
+      <label><span>买入成本</span><input id="stockCost" type="text" value="自动按 今日价 × 股数 计算" disabled></label>
+      <label><span>统一股价（留空不改）</span><input id="stockPrice" type="number" min="0" max="9999" step="0.01" placeholder="默认不修改"></label>
+    </div>
+    <div class="fields">
+      <label><span>统一今日现量</span><input id="stockVolume" type="number" min="0" max="65535" value="9999"></label>
+      <label><span>统一流通量</span><input id="stockFloat" type="number" min="0" max="32767" value="20000"></label>
+      <label><span>统一上市剩余天数</span><input id="stockDays" type="number" min="-1" max="9999" value="0"></label>
+      <div class="field"><span>读取游戏文字库</span><label class="file-mini" for="wordDatInput">选择 WORD.DAT</label><input id="wordDatInput" type="file" accept=".dat,.DAT,application/octet-stream"></div>
+    </div>
+    <div class="toolbar section-gap">
+      <button id="applyStocks" class="primary" disabled>我方持股设为指定数量</button>
+      <button id="buyAllFloatStocks" disabled>我方买光可流通股</button>
+      <button id="clearComputerStocks" class="warn" disabled>清空电脑股票</button>
+      <button id="raiseStockPrices" disabled>设置上市股价</button>
+      <button id="applyStockMarketBatch" disabled>批量设置现量/上市</button>
+      <button id="listUtilityStocks" disabled>公用事业上市并持股</button>
+      <button id="syncStockMarket" disabled>按持股同步现量</button>
+      <button id="applyStockTable" class="primary" disabled>应用表格修改</button>
+    </div>
+    <div id="stockStatus" class="status">载入存档后会自动识别有效股票数量。当前这份存档通常是 16 支。</div>
+    <details class="section-gap">
+      <summary>展开股票市场信息表</summary>
+    <div class="table-wrap">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>#</th><th>股票名称</th><th>名称索引</th><th>剩余天</th><th>承销</th><th>今日价</th><th>昨日价</th><th>现量</th><th>流通量</th>
+          </tr>
+        </thead>
+        <tbody id="stockMarketRows"></tbody>
+      </table>
+    </div>
+    </details>
+    <details class="section-gap">
+      <summary>展开玩家持股表</summary>
+    <div class="table-wrap">
+      <table class="holding-table">
+        <thead>
+          <tr>
+            <th>#</th><th>股票名称</th>
+            <th>P1 股</th><th>P1 成本</th><th>P2 股</th><th>P2 成本</th><th>P3 股</th><th>P3 成本</th><th>P4 股</th><th>P4 成本</th><th>P5 股</th><th>P5 成本</th><th>P6 股</th><th>P6 成本</th>
+          </tr>
+        </thead>
+        <tbody id="stockHoldingRows"></tbody>
+      </table>
+    </div>
+    </details>
+  </section>
+
+  <section class="panel section-gap">
+    <h2>土地管理</h2>
+    <p class="small">土地归属修改已禁用：只改存档里的所有者会造成“实际归属变了，但地图颜色仍像空地”的问题。为了不做出你不喜欢的半成品效果，这里只保留查看，不建议保存这些字段。</p>
+    <div class="fields">
+      <label><span>土地/公司记录数量</span><input id="landCount" type="number" min="1" max="121" value="121"></label>
+      <label><span>目标所有者</span><select id="landOwnerTarget"></select></label>
+      <label><span>地价批量设为</span><input id="landPrice" type="number" min="0" max="2147483647" value="999999"></label>
+      <label><span>房价批量设为</span><input id="landHousePrice" type="number" min="0" max="2147483647" value="1"></label>
+    </div>
+    <div class="toolbar section-gap">
+      <button id="ownAllLand" class="warn" disabled>已禁用：全部归我</button>
+      <button id="clearComputerLand" class="warn" disabled>已禁用：清空电脑土地</button>
+      <button id="setAllLandOwner" disabled>已禁用：批量设置所有者</button>
+      <button id="setLandPriceBatch" disabled>已禁用：批量设置地价/房价</button>
+      <button id="applyLandTable" disabled>已禁用：应用土地表格</button>
+    </div>
+    <div id="landStatus" class="status">当前只读显示土地/公司记录。归属修改会造成地图颜色不同步，已关闭。</div>
+    <details class="section-gap">
+      <summary>展开土地拥有明细表</summary>
+      <div class="table-wrap">
+        <table class="stock-table">
+          <thead>
+            <tr><th>#</th><th>地价</th><th>房价</th><th>未知</th><th>所有者</th></tr>
+          </thead>
+          <tbody id="landRows"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel section-gap">
+    <h2>过路费管理</h2>
+    <p class="small">过路费表是公开资料明确写在存档里的区域。每条记录 6 个金额：空地、1-5 级房屋。</p>
+    <div class="fields">
+      <label><span>土地记录数量</span><input id="rentCount" type="number" min="1" max="120" value="119"></label>
+      <label><span>统一空地过路费</span><input id="rent0" type="number" min="0" max="2147483647" value="999999"></label>
+      <label><span>统一 1 级过路费</span><input id="rent1" type="number" min="0" max="2147483647" value="999999"></label>
+      <label><span>统一 5 级过路费</span><input id="rent5" type="number" min="0" max="2147483647" value="999999"></label>
+    </div>
+    <div class="toolbar section-gap">
+      <button id="applyRentBatch" class="primary" disabled>批量设置过路费</button>
+      <button id="zeroRentBatch" class="warn" disabled>全部过路费清零</button>
+      <button id="applyRentTable" disabled>应用过路费表格</button>
+    </div>
+    <div id="rentStatus" class="status">载入存档后可修改土地过路费。默认显示前 119 条记录。</div>
+    <details class="section-gap">
+      <summary>展开过路费明细表</summary>
+      <div class="table-wrap">
+      <table class="stock-table">
+        <thead>
+          <tr><th>#</th><th>空地</th><th>1 级</th><th>2 级</th><th>3 级</th><th>4 级</th><th>5 级</th></tr>
+        </thead>
+        <tbody id="rentRows"></tbody>
+      </table>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel section-gap">
+    <h2>高级修改</h2>
+    <div class="fields">
+      <label><span>当前回合玩家</span><input id="turnPlayer" type="number" min="1" max="6" value="1"></label>
+      <label><span>年份</span><input id="year" type="number" min="1996" max="2099" value="1996"></label>
+      <label><span>月份</span><input id="month" type="number" min="1" max="12" value="1"></label>
+      <label><span>日期</span><input id="day" type="number" min="1" max="31" value="1"></label>
+    </div>
+    <div class="fields">
+      <label><span>X 坐标（需有效道路）</span><input id="posX" type="number" min="0" max="49" value="0"></label>
+      <label><span>Y 坐标（需有效道路）</span><input id="posY" type="number" min="0" max="49" value="0"></label>
+      <label><span>交通工具</span><select id="vehicle"><option value="0">无</option><option value="1">机车</option><option value="2" selected>汽车</option></select></label>
+      <label><span>信用额度</span><input id="creditLimit" type="number" min="0" max="2147483647" value="9999999"></label>
+    </div>
+    <div class="fields">
+      <label><span>坐牢天数</span><input id="jailDays" type="number" min="0" max="999" value="0"></label>
+      <label><span>住院天数</span><input id="hospitalDays" type="number" min="0" max="999" value="0"></label>
+      <label><span>睡眠天数</span><input id="sleepDays" type="number" min="0" max="999" value="0"></label>
+      <label><span>梦游天数</span><input id="sleepwalkDays" type="number" min="0" max="999" value="0"></label>
+    </div>
+    <div class="fields">
+      <label><span>附身状态</span><select id="godType"></select></label>
+      <label><span>附身天数 / 炸弹步数</span><input id="godTurns" type="number" min="0" max="999" value="0"></label>
+      <label><span>状态预设</span><select id="statusPreset"><option value="clear">清空负面状态</option><option value="lucky">财神 7 天</option><option value="custom">使用上方自定义</option></select></label>
+      <label><span>配置状态</span><input id="settingsStatus" type="text" value="未保存配置" disabled></label>
+    </div>
+    <div class="toolbar section-gap">
+      <button id="applyDate" disabled>设置日期 / 回合</button>
+      <button id="applyPosition" disabled>设置位置 / 交通工具</button>
+      <button id="applyTaskStatus" disabled>应用任务 / 附身状态</button>
+      <button id="clearHumanStatus" disabled>清除我方负面状态</button>
+      <button id="applyCredit" disabled>提高信用 / 清贷款</button>
+      <button id="clearRoadEvents" class="warn" disabled>清空道路事件</button>
+      <button id="bankruptComputers" class="warn" disabled>让电脑破产</button>
+    </div>
+    <div id="advancedStatus" class="status">可修改日期、回合、坐标、交通工具、信用、贷款、状态和地图事件。附身编号使用道路事件编号表。</div>
+  </section>
+
+  <section class="panel section-gap">
+    <h2>卡片与道具编号</h2>
+    <div class="toolbar section-gap">
+      <button id="fillCardsFromCatalog" disabled>我方补满卡片</button>
+      <button id="fillCardPoolFromCatalog" disabled>补满卡片池</button>
+      <button id="clearHumanCards" class="warn" disabled>清空我方卡片</button>
+      <button id="fillItemsFromCatalog" disabled>我方补满道具</button>
+      <button id="clearHumanItems" class="warn" disabled>清空我方道具</button>
+      <button id="clearComputerInventoryFromCatalog" class="warn" disabled>清空电脑卡片道具</button>
+    </div>
+    <div class="cards" id="catalog"></div>
+    <p class="small section-gap">说明：道具栏实际只有 8 类道具；汽车会单独装备，不占道具栏。卡片栏最多 15 张，存档只能在读档前补满，进游戏使用后仍会按游戏规则消耗；要再次补满就重新打开存档套用一次。</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const SAVE_SIZE_MIN = 0x538A;
+  const PLAYER_BASE = 0x14;
+  const PLAYER_STRIDE = 0x66;
+  const PLAYER_COUNT = 6;
+  const PLAYER_VIEW_COUNT = 7;
+  const CARD_POOL = 0x27F4;
+  const CARD_INFO = 0x28CC;
+  const CARD_SLOTS = 15;
+  const CARD_POOL_CAPACITY = 107;
+  const ITEM_INFO = 0x5314;
+  const ITEM_GROUP_STRIDE = 14;
+  const STOCK_HOLDINGS = 0x29CC;
+  const STOCK_HOLDING_STRIDE = 42;
+  const STOCK_PLAYER_STRIDE = 6;
+  const STOCK_INFO = 0x2D80;
+  const STOCK_INFO_STRIDE = 46;
+  const STOCK_MAX_SAFE = 22;
+  const HEADER_CURRENT_PLAYER = 0x0000;
+  const HEADER_YEAR = 0x0004;
+  const HEADER_MONTH = 0x0006;
+  const HEADER_DAY = 0x0008;
+  const HEADER_WEEKDAY = 0x000A;
+  const ROAD_EVENTS = 0x4D0E;
+  const ROAD_EVENT_COUNT = 9;
+  const ROAD_EVENT_STRIDE = 6;
+  const RENT_TABLE = 0x1BAC;
+  const RENT_RECORD_STRIDE = 24;
+  const RENT_MAX_SAFE = 120;
+  const LAND_TABLE = 0x1600;
+  const LAND_RECORD_STRIDE = 12;
+  const LAND_MAX_SAFE = 121;
+
+  const playerOffsets = {
+    id: 0x12, control: 0x14, x: 0x16, y: 0x18, direction: 0x1A, vehicle: 0x1C,
+    jail: 0x1E, hospital: 0x20, sleep: 0x22, sleepwalk: 0x24,
+    god: 0x30, godTurns: 0x32, cash: 0x38, bank: 0x3C,
+    creditLimit: 0x40, creditUsed: 0x44, loan: 0x4A, coupon: 0x58
+  };
+
+  const controlName = { 0: "未启用", 1: "玩家", 2: "托管", 3: "电脑" };
+  const cards = [
+    [0x01, "天使卡"], [0x02, "恶魔卡"], [0x03, "怪兽卡"], [0x04, "均贫卡"], [0x05, "均富卡"],
+    [0x06, "购地卡"], [0x07, "换地卡"], [0x08, "换屋卡"], [0x09, "售地卡"], [0x0A, "炒地卡"],
+    [0x0B, "拆屋卡"], [0x0C, "改建卡"], [0x0D, "抢夺卡"], [0x0E, "查税卡"], [0x0F, "停留卡"],
+    [0x10, "冬眠卡"], [0x11, "梦游卡"], [0x12, "陷害卡"], [0x13, "复仇卡"], [0x14, "嫁祸卡"],
+    [0x15, "免费卡"], [0x16, "免罪卡"], [0x17, "红卡"], [0x18, "黑卡"], [0x19, "请神符"],
+    [0x1A, "送神符"]
+  ];
+  const fullHand = [0x01,0x01,0x02,0x02,0x03,0x03,0x06,0x06,0x0F,0x0F,0x10,0x15,0x15,0x16,0x1A];
+  const itemNames = ["信用卡", "定时炸弹", "飞弹", "地雷", "路障", "遥控骰子", "机器娃娃", "机票"];
+  const stockNameByIndex = {
+    131: "电力公司", 132: "电视公司", 133: "力霸房屋", 134: "自来水厂", 136: "太平洋",
+    137: "中华航空", 138: "新光三越", 139: "来来饭店", 140: "凯悦饭店",
+    433: "中兴纺织", 434: "海信电器", 435: "新飞电器", 436: "华西集团",
+    437: "双环化工", 439: "柳州钢铁", 459: "太原重机"
+  };
+  const godTypes = [
+    [0x00, "00h - 无"],
+    [0x08, "08h - 财神"],
+    [0x09, "09h - 福神"],
+    [0x0A, "0Ah - 穷神"],
+    [0x0B, "0Bh - 衰神"],
+    [0x0C, "0Ch - 恶魔"],
+    [0x0D, "0Dh - 天使"],
+    [0x0E, "0Eh - 小财神"],
+    [0x0F, "0Fh - 小福神"],
+    [0x10, "10h - 小穷神"],
+    [0x11, "11h - 小衰神"],
+    [0x14, "14h - 定时炸弹"]
+  ];
+  const settingsKey = "richman3-save-editor-settings-v1";
+
+  let fileHandle = null;
+  let fileName = "1.SAV";
+  let bytes = null;
+  let view = null;
+  let dirty = false;
+  let downloadUrl = null;
+  let wordDatNames = {};
+  let stockFloatTotals = [];
+
+  const $ = (id) => document.getElementById(id);
+
+  function fillSelects() {
+    $("humanSlot").innerHTML = "";
+    $("computerStart").innerHTML = "";
+    $("landOwnerTarget").innerHTML = "";
+    $("godType").innerHTML = "";
+    $("landOwnerTarget").add(new Option("无人", "0"));
+    for (const [value, label] of godTypes) $("godType").add(new Option(label, String(value)));
+    for (let i = 0; i < PLAYER_COUNT; i++) {
+      $("humanSlot").add(new Option(`第 ${i + 1} 位`, String(i)));
+      $("computerStart").add(new Option(`第 ${i + 1} 位`, String(i)));
+      $("landOwnerTarget").add(new Option(`第 ${i + 1} 位玩家`, String(i + 1)));
+    }
+    $("humanSlot").value = "0";
+    $("computerStart").value = "1";
+    $("landOwnerTarget").value = "1";
+    $("godType").value = "0";
+  }
+
+  function renderCatalog() {
+    $("catalog").innerHTML = [
+      ...cards.map(([id, name]) => `<div class="card-line"><span>${name}</span><code>${hex(id)}</code></div>`),
+      ...itemNames.map((name, idx) => `<div class="card-line"><span>${name}</span><code>道具${idx + 1}</code></div>`)
+    ].join("");
+  }
+
+  function godLabel(value) {
+    const found = godTypes.find(([id]) => id === value);
+    return found ? found[1] : `${hex(value)} - 未知道路事件编号`;
+  }
+
+  function hex(value) { return "0x" + value.toString(16).toUpperCase().padStart(2, "0"); }
+  function clamp(value, min, max) {
+    value = Number.isFinite(Number(value)) ? Math.trunc(Number(value)) : 0;
+    return Math.max(min, Math.min(max, value));
+  }
+  function u16(offset) { return view.getUint16(offset, true); }
+  function i32(offset) { return view.getInt32(offset, true); }
+  function f32(offset) { return view.getFloat32(offset, true); }
+  function setU16(offset, value) { view.setUint16(offset, clamp(value, 0, 65535), true); }
+  function setI32(offset, value) { view.setInt32(offset, clamp(value, -2147483648, 2147483647), true); }
+  function setF32(offset, value) {
+    value = Number.isFinite(Number(value)) ? Number(value) : 0;
+    view.setFloat32(offset, Math.max(0, Math.min(9999, value)), true);
+  }
+  function playerBase(slot) { return PLAYER_BASE + slot * PLAYER_STRIDE; }
+
+  function setStatus(html) { $("status").innerHTML = html; }
+  function setEnabled(enabled) {
+    [
+      "saveDirect", "saveNative", "download", "applyMoney", "applyCards", "applyItems", "applyStatusCredit", "clearComputers",
+      "applyStocks", "buyAllFloatStocks", "clearComputerStocks", "raiseStockPrices", "applyStockMarketBatch", "listUtilityStocks", "syncStockMarket", "applyStockTable",
+      "applyRentBatch", "zeroRentBatch", "applyRentTable",
+      "estimatePriceIndex", "capHumanLiquidAssets", "capHumanStockAssets", "priceFriendlyMode",
+      "applyDate", "applyPosition", "applyTaskStatus", "clearHumanStatus", "applyCredit", "clearRoadEvents", "bankruptComputers",
+      "fillCardsFromCatalog", "fillCardPoolFromCatalog", "clearHumanCards", "fillItemsFromCatalog", "clearHumanItems", "clearComputerInventoryFromCatalog"
+    ].forEach(id => { $(id).disabled = !enabled; });
+    $("saveDirect").disabled = !enabled || !fileHandle || !fileHandle.createWritable;
+  }
+
+  function clearDownloadLink() {
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+    downloadUrl = null;
+    $("downloadArea").style.display = "none";
+    $("downloadArea").innerHTML = "";
+  }
+
+  function validateSave(buffer) {
+    if (buffer.byteLength < SAVE_SIZE_MIN) throw new Error(`文件太小，不像大富翁3存档：${buffer.byteLength} bytes`);
+  }
+
+  async function loadFile(file, handle = null) {
+    const buffer = await file.arrayBuffer();
+    validateSave(buffer);
+    fileHandle = handle;
+    fileName = file.name || "1.SAV";
+    bytes = new Uint8Array(buffer);
+    view = new DataView(bytes.buffer);
+    dirty = false;
+    clearDownloadLink();
+    inferHumanSlot();
+    inferStockCount();
+    captureStockFloatTotals();
+    loadCurrentPositionInputs();
+    loadCurrentStatusInputs();
+    renderPlayers();
+    renderStockTable();
+    renderLandTable();
+    renderRentTable();
+    setEnabled(true);
+    $("selectedFileName").textContent = fileName;
+    setStatus(`<strong>${fileName}</strong> 已载入，大小 ${bytes.byteLength} bytes。`);
+  }
+
+  function readPlayer(slot) {
+    const base = playerBase(slot);
+    return {
+      slot,
+      control: u16(base + playerOffsets.control),
+      cash: i32(base + playerOffsets.cash),
+      bank: i32(base + playerOffsets.bank),
+      coupon: i32(base + playerOffsets.coupon),
+      cardCount: countCards(slot)
+    };
+  }
+
+  function countCards(slot) {
+    let total = 0;
+    for (let cardSlot = 0; cardSlot < CARD_SLOTS; cardSlot++) {
+      if (u16(CARD_INFO + cardSlot * 14 + slot * 2) !== 0) total++;
+    }
+    return total;
+  }
+
+  function inferHumanSlot() {
+    for (let i = 0; i < PLAYER_COUNT; i++) {
+      if (readPlayer(i).control === 1) {
+        $("humanSlot").value = String(i);
+        $("computerStart").value = String(Math.min(i + 1, PLAYER_COUNT - 1));
+        return;
+      }
+    }
+  }
+
+  function renderPlayers() {
+    if (!bytes) return;
+    const rows = [];
+    for (let i = 0; i < PLAYER_COUNT; i++) {
+      const p = readPlayer(i);
+      rows.push(`<tr>
+        <td>${i + 1}</td>
+        <td><span class="chip">${controlName[p.control] || p.control}</span></td>
+        <td>${p.cash}</td><td>${p.bank}</td><td>${p.coupon}</td><td>${p.cardCount}/15</td>
+      </tr>`);
+    }
+    $("players").innerHTML = rows.join("");
+  }
+
+  function loadCurrentPositionInputs() {
+    if (!bytes) return;
+    const slot = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+    const base = playerBase(slot);
+    $("posX").value = String(u16(base + playerOffsets.x));
+    $("posY").value = String(u16(base + playerOffsets.y));
+    $("vehicle").value = String(Math.min(2, u16(base + playerOffsets.vehicle)));
+  }
+
+  function loadCurrentStatusInputs() {
+    if (!bytes) return;
+    const slot = humanSlot();
+    const base = playerBase(slot);
+    $("jailDays").value = String(u16(base + playerOffsets.jail));
+    $("hospitalDays").value = String(u16(base + playerOffsets.hospital));
+    $("sleepDays").value = String(u16(base + playerOffsets.sleep));
+    $("sleepwalkDays").value = String(u16(base + playerOffsets.sleepwalk));
+    const godValue = u16(base + playerOffsets.god);
+    $("godType").value = godTypes.some(([id]) => id === godValue) ? String(godValue) : "0";
+    $("godTurns").value = String(Math.max(0, i32(base + playerOffsets.godTurns)));
+    $("advancedStatus").textContent = `当前附身：${godLabel(godValue)}，剩余天数/步数：${Math.max(0, i32(base + playerOffsets.godTurns))}。`;
+  }
+
+  function setPlayerNumbers(slot, options) {
+    const base = playerBase(slot);
+    if (options.cash !== undefined) setI32(base + playerOffsets.cash, options.cash);
+    if (options.bank !== undefined) setI32(base + playerOffsets.bank, options.bank);
+    if (options.coupon !== undefined) setI32(base + playerOffsets.coupon, options.coupon);
+  }
+
+  function setVehicle(slot, vehicle) { setU16(playerBase(slot) + playerOffsets.vehicle, vehicle); }
+
+  function setPlayerCards(slot, cardIds) {
+    for (let cardSlot = 0; cardSlot < CARD_SLOTS; cardSlot++) {
+      setU16(CARD_INFO + cardSlot * 14 + slot * 2, cardIds[cardSlot] || 0);
+    }
+  }
+
+  function setPlayerItems(slot, count) {
+    const safeCount = clamp(count, 0, 999);
+    for (let group = 0; group < itemNames.length; group++) {
+      const value = group === 0 ? Math.min(safeCount, 1) : safeCount;
+      setU16(ITEM_INFO + group * ITEM_GROUP_STRIDE + slot * 2, value);
+    }
+  }
+
+  function clearPlayerInventory(slot) {
+    setPlayerCards(slot, []);
+    setPlayerItems(slot, 0);
+    setPlayerNumbers(slot, { coupon: 0 });
+  }
+
+  function clearStatusForPlayer(slot) {
+    const base = playerBase(slot);
+    setU16(base + playerOffsets.jail, 0);
+    setU16(base + playerOffsets.hospital, 0);
+    setU16(base + playerOffsets.sleep, 0);
+    setU16(base + playerOffsets.sleepwalk, 0);
+    setU16(base + playerOffsets.god, 0);
+    setI32(base + playerOffsets.godTurns, 0);
+  }
+
+  function applyTaskStatus() {
+    const slot = humanSlot();
+    const base = playerBase(slot);
+    const preset = $("statusPreset").value;
+    if (preset === "clear") {
+      clearStatusForPlayer(slot);
+    } else if (preset === "lucky") {
+      setU16(base + playerOffsets.jail, 0);
+      setU16(base + playerOffsets.hospital, 0);
+      setU16(base + playerOffsets.sleep, 0);
+      setU16(base + playerOffsets.sleepwalk, 0);
+      setU16(base + playerOffsets.god, 0x08);
+      setI32(base + playerOffsets.godTurns, 7);
+    } else {
+      setU16(base + playerOffsets.jail, $("jailDays").value);
+      setU16(base + playerOffsets.hospital, $("hospitalDays").value);
+      setU16(base + playerOffsets.sleep, $("sleepDays").value);
+      setU16(base + playerOffsets.sleepwalk, $("sleepwalkDays").value);
+      setU16(base + playerOffsets.god, $("godType").value);
+      setI32(base + playerOffsets.godTurns, $("godTurns").value);
+    }
+    dirty = true;
+    loadCurrentStatusInputs();
+    $("advancedStatus").textContent = `已应用玩家 ${slot + 1} 的任务/附身状态。`;
+  }
+
+  function refillCardPool() {
+    const requested = clamp($("poolCount").value, 0, CARD_POOL_CAPACITY);
+    setU16(CARD_POOL, requested);
+    for (let i = 0; i < CARD_POOL_CAPACITY; i++) {
+      setU16(CARD_POOL + 2 + i * 2, i < requested ? fullHand[i % fullHand.length] : 0);
+    }
+  }
+
+  function humanSlot() {
+    return clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+  }
+  function applyHumanMoney() {
+    const slot = humanSlot();
+    setPlayerNumbers(slot, { cash: $("cash").value, bank: $("bank").value, coupon: $("coupon").value });
+    dirty = true;
+  }
+  function fillHumanCards() {
+    setPlayerCards(humanSlot(), fullHand);
+    dirty = true;
+  }
+  function clearHumanCardsOnly() {
+    setPlayerCards(humanSlot(), []);
+    dirty = true;
+  }
+  function fillHumanItems() {
+    setPlayerItems(humanSlot(), $("itemCount").value);
+    setVehicle(humanSlot(), 2);
+    dirty = true;
+  }
+  function clearHumanItemsOnly() {
+    setPlayerItems(humanSlot(), 0);
+    dirty = true;
+  }
+  function applyHumanStatusCredit() {
+    const slot = humanSlot();
+    const base = playerBase(slot);
+    clearStatusForPlayer(slot);
+    setI32(base + playerOffsets.creditLimit, $("creditLimit").value);
+    setI32(base + playerOffsets.creditUsed, 0);
+    setU16(base + 0x48, 999);
+    setI32(base + playerOffsets.loan, 0);
+    dirty = true;
+  }
+
+  function strengthenHuman() {
+    applyHumanMoney();
+    fillHumanItems();
+    fillHumanCards();
+    applyHumanStatusCredit();
+    refillCardPool();
+    dirty = true;
+  }
+
+  function clearComputers() {
+    const start = clamp($("computerStart").value, 0, PLAYER_COUNT - 1);
+    const total = clamp($("computerCount").value, 0, PLAYER_COUNT);
+    const human = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+    for (let slot = start; slot < Math.min(PLAYER_COUNT, start + total); slot++) {
+      if (slot !== human) clearPlayerInventory(slot);
+    }
+    dirty = true;
+  }
+
+  function stockHoldingOffset(stockIndex, playerSlot) {
+    return STOCK_HOLDINGS + stockIndex * STOCK_HOLDING_STRIDE + playerSlot * STOCK_PLAYER_STRIDE;
+  }
+  function stockInfoOffset(stockIndex) { return STOCK_INFO + stockIndex * STOCK_INFO_STRIDE; }
+  function i16(offset) { return view.getInt16(offset, true); }
+  function setI16(offset, value) { view.setInt16(offset, clamp(value, -32768, 32767), true); }
+  function stockDisplayName(nameIndex, stockIndex) {
+    return wordDatNames[nameIndex] || stockNameByIndex[nameIndex] || `股票${stockIndex + 1}`;
+  }
+  function readStock(stockIndex) {
+    const offset = stockInfoOffset(stockIndex);
+    const row = {
+      index: stockIndex,
+      nameIndex: u16(offset),
+      days: i16(offset + 2),
+      underwritingIndex: u16(offset + 4),
+      priceToday: f32(offset + 8),
+      priceYesterday: f32(offset + 12),
+      volume: u16(offset + 16),
+      floating: u16(offset + 18),
+      players: []
+    };
+    for (let p = 0; p < PLAYER_COUNT; p++) {
+      const hold = stockHoldingOffset(stockIndex, p);
+      row.players.push({ shares: u16(hold), cost: i32(hold + 2) });
+    }
+    row.name = stockDisplayName(row.nameIndex, stockIndex);
+    return row;
+  }
+  function renderStockTable() {
+    if (!bytes) return;
+    const count = selectedStockCount();
+    const marketRows = [];
+    const holdingRows = [];
+    for (let s = 0; s < count; s++) {
+      const stock = readStock(s);
+      const playerCells = stock.players.map((p, idx) => `
+        <td><input class="stock-num" data-stock="${s}" data-player="${idx}" data-field="shares" type="number" min="0" max="32767" value="${p.shares}"></td>
+        <td><input class="stock-cost" data-stock="${s}" data-player="${idx}" data-field="cost" type="number" min="-2147483648" max="2147483647" value="${p.cost}"></td>
+      `).join("");
+      marketRows.push(`<tr>
+        <td>${s + 1}</td>
+        <td><input class="stock-name" data-stock="${s}" data-field="name" value="${stock.name}"></td>
+        <td><input class="stock-small" data-stock="${s}" data-field="nameIndex" type="number" min="0" max="65535" value="${stock.nameIndex}"></td>
+        <td><input class="stock-small" data-stock="${s}" data-field="days" type="number" min="-1" max="9999" value="${stock.days}"></td>
+        <td><input class="stock-small" data-stock="${s}" data-field="underwritingIndex" type="number" min="0" max="65535" value="${stock.underwritingIndex}"></td>
+        <td><input class="stock-num" data-stock="${s}" data-field="priceToday" type="number" min="0" max="9999" step="0.01" value="${stock.priceToday.toFixed(2)}"></td>
+        <td><input class="stock-num" data-stock="${s}" data-field="priceYesterday" type="number" min="0" max="9999" step="0.01" value="${stock.priceYesterday.toFixed(2)}"></td>
+        <td><input class="stock-num" data-stock="${s}" data-field="volume" type="number" min="0" max="32767" value="${stock.volume}"></td>
+        <td><input class="stock-num" data-stock="${s}" data-field="floating" type="number" min="0" max="32767" value="${stock.floating}"></td>
+      </tr>`);
+      holdingRows.push(`<tr>
+        <td>${s + 1}</td>
+        <td>${stock.name}</td>
+        ${playerCells}
+      </tr>`);
+    }
+    $("stockMarketRows").innerHTML = marketRows.join("");
+    $("stockHoldingRows").innerHTML = holdingRows.join("");
+  }
+
+  function inferStockCount() {
+    let count = 0;
+    for (let i = 0; i < STOCK_MAX_SAFE; i++) {
+      const offset = stockInfoOffset(i);
+      const nameIndex = u16(offset);
+      const price = f32(offset + 8);
+      const currentVolume = u16(offset + 16);
+      const floatingVolume = u16(offset + 18);
+      const ok = nameIndex > 0 && nameIndex < 2000 && Number.isFinite(price) && price >= 0 && price < 10000 && (price > 0 || currentVolume > 0 || floatingVolume > 0);
+      if (!ok) break;
+      count++;
+    }
+    if (count < 1) count = 16;
+    $("stockCount").value = String(count);
+    $("stockStatus").textContent = `已识别 ${count} 支有效股票。`;
+    return count;
+  }
+
+  function selectedStockCount() { return clamp($("stockCount").value, 1, STOCK_MAX_SAFE); }
+  function totalHeldShares(stock) {
+    let held = 0;
+    for (let p = 0; p < PLAYER_COUNT; p++) held += u16(stockHoldingOffset(stock, p));
+    return held;
+  }
+  function captureStockFloatTotals() {
+    stockFloatTotals = [];
+    const count = selectedStockCount();
+    for (let stock = 0; stock < count; stock++) {
+      const info = stockInfoOffset(stock);
+      stockFloatTotals[stock] = u16(info + 18) + totalHeldShares(stock);
+    }
+  }
+  function applyStockTableToBytes() {
+    const count = selectedStockCount();
+    const nameInputs = document.querySelectorAll('#stockMarketRows input[data-field="name"]');
+    for (const input of nameInputs) {
+      const stock = Number(input.dataset.stock);
+      const nameIndexInput = document.querySelector(`#stockMarketRows input[data-stock="${stock}"][data-field="nameIndex"]`);
+      const nameIndex = clamp(nameIndexInput.value, 0, 65535);
+      const name = input.value.trim();
+      if (name) stockNameByIndex[nameIndex] = name;
+    }
+    for (let stock = 0; stock < count; stock++) {
+      const offset = stockInfoOffset(stock);
+      const get = (field) => document.querySelector(`#stockMarketRows input[data-stock="${stock}"][data-field="${field}"]`).value;
+      setU16(offset, get("nameIndex"));
+      setI16(offset + 2, get("days"));
+      setU16(offset + 4, get("underwritingIndex"));
+      setF32(offset + 8, get("priceToday"));
+      setF32(offset + 12, get("priceYesterday"));
+      setU16(offset + 16, get("volume"));
+      setU16(offset + 18, get("floating"));
+      for (let p = 0; p < PLAYER_COUNT; p++) {
+        const hold = stockHoldingOffset(stock, p);
+        const shares = document.querySelector(`#stockHoldingRows input[data-stock="${stock}"][data-player="${p}"][data-field="shares"]`).value;
+        const cost = document.querySelector(`#stockHoldingRows input[data-stock="${stock}"][data-player="${p}"][data-field="cost"]`).value;
+        setU16(hold, shares);
+        setI32(hold + 2, cost);
+      }
+    }
+    for (let stock = 0; stock < count; stock++) {
+      stockFloatTotals[stock] = u16(stockInfoOffset(stock) + 18) + totalHeldShares(stock);
+    }
+    syncStockMarketFromHoldings();
+    dirty = true;
+    $("stockStatus").textContent = `已应用 ${count} 支股票的表格修改，并同步现量/流通量。`;
+  }
+  function syncStockMarketFromHoldings() {
+    const count = selectedStockCount();
+    for (let stock = 0; stock < count; stock++) {
+      const held = totalHeldShares(stock);
+      const info = stockInfoOffset(stock);
+      const total = stockFloatTotals[stock] || (u16(info + 18) + held);
+      const floating = Math.max(0, Math.min(32767, total - held));
+      setU16(info + 18, floating);
+      setU16(info + 16, Math.min(u16(info + 16), floating));
+    }
+    renderStockTable();
+    $("stockStatus").textContent = `已按玩家持股同步 ${count} 支股票的现量和流通量。`;
+  }
+  function setPlayerStock(stockIndex, playerSlot, shares, cost) {
+    const offset = stockHoldingOffset(stockIndex, playerSlot);
+    setU16(offset, shares);
+    setI32(offset + 2, cost);
+  }
+  function maxHumanStocks() {
+    const human = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+    const count = selectedStockCount();
+    const desiredShares = clamp($("stockShares").value, 0, 32767);
+    for (let stock = 0; stock < count; stock++) {
+      const info = stockInfoOffset(stock);
+      const price = Math.max(0.01, f32(info + 8));
+      const humanOldShares = u16(stockHoldingOffset(stock, human));
+      const total = stockFloatTotals[stock] || (u16(info + 18) + totalHeldShares(stock));
+      const othersHeld = totalHeldShares(stock) - humanOldShares;
+      const shares = Math.min(desiredShares, Math.max(0, total - othersHeld));
+      const cost = clamp(Math.round(price * shares), 0, 2147483647);
+      setPlayerStock(stock, human, shares, cost);
+      const heldAfter = totalHeldShares(stock);
+      const floating = Math.max(0, total - heldAfter);
+      setU16(info + 18, floating);
+      setU16(info + 16, Math.min(u16(info + 16), floating));
+    }
+    dirty = true;
+    $("stockStatus").textContent = `已按每支股票真实流通盘设置玩家 ${human + 1} 的持股，并同步成本和流通量。`;
+    renderStockTable();
+  }
+  function buyAllFloatingStocksForHuman() {
+    const human = humanSlot();
+    const count = selectedStockCount();
+    for (let stock = 0; stock < count; stock++) {
+      const info = stockInfoOffset(stock);
+      const price = Math.max(0.01, f32(info + 8));
+      const humanOldShares = u16(stockHoldingOffset(stock, human));
+      const total = stockFloatTotals[stock] || (u16(info + 18) + totalHeldShares(stock));
+      const othersHeld = totalHeldShares(stock) - humanOldShares;
+      const shares = Math.max(0, Math.min(32767, total - othersHeld));
+      setPlayerStock(stock, human, shares, clamp(Math.round(price * shares), 0, 2147483647));
+      setU16(info + 18, 0);
+      setU16(info + 16, 0);
+    }
+    dirty = true;
+    renderStockTable();
+    $("stockStatus").textContent = `已让玩家 ${human + 1} 买光 ${count} 支股票的可流通股，现量/流通量已归零。`;
+  }
+  function clearComputerStocks() {
+    const start = clamp($("computerStart").value, 0, PLAYER_COUNT - 1);
+    const total = clamp($("computerCount").value, 0, PLAYER_COUNT);
+    const human = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+    const count = selectedStockCount();
+    for (let stock = 0; stock < count; stock++) {
+      for (let slot = start; slot < Math.min(PLAYER_COUNT, start + total); slot++) {
+        if (slot !== human) setPlayerStock(stock, slot, 0, 0);
+      }
+    }
+    syncStockMarketFromHoldings();
+    dirty = true;
+    $("stockStatus").textContent = `已清空电脑的 ${count} 支股票持股。`;
+  }
+
+  function playerStockMarketValue(slot) {
+    let total = 0;
+    const count = selectedStockCount();
+    for (let stock = 0; stock < count; stock++) {
+      total += u16(stockHoldingOffset(stock, slot)) * Math.max(0, f32(stockInfoOffset(stock) + 8));
+    }
+    return Math.round(total);
+  }
+  function playerLiquidAssets(slot) {
+    const base = playerBase(slot);
+    return i32(base + playerOffsets.cash) + i32(base + playerOffsets.bank);
+  }
+  function estimatePriceIndexValue() {
+    let activePlayers = 0;
+    let totalAssets = 0;
+    for (let slot = 0; slot < PLAYER_COUNT; slot++) {
+      const control = u16(playerBase(slot) + playerOffsets.control);
+      if (!control) continue;
+      activePlayers++;
+      totalAssets += playerLiquidAssets(slot) + playerStockMarketValue(slot);
+    }
+    if (!activePlayers) return { activePlayers: 0, totalAssets: 0, average: 0, index: 0 };
+    const average = totalAssets / activePlayers;
+    return { activePlayers, totalAssets, average, index: average / 200000 };
+  }
+  function showEstimatedPriceIndex() {
+    const estimate = estimatePriceIndexValue();
+    $("priceIndexStatus").textContent = `估算指数 ${estimate.index.toFixed(2)}，玩家数 ${estimate.activePlayers}，估算平均资产 ${Math.round(estimate.average)}。真实值以游戏内为准。`;
+  }
+  function capHumanLiquidAssets() {
+    const slot = humanSlot();
+    const cap = clamp($("friendlyCashCap").value, 0, 2147483647);
+    setPlayerNumbers(slot, { cash: cap, bank: 0 });
+    $("cash").value = String(cap);
+    $("bank").value = "0";
+    dirty = true;
+    renderPlayers();
+    showEstimatedPriceIndex();
+  }
+  function capHumanStockAssets() {
+    const slot = humanSlot();
+    const cap = clamp($("friendlyStockCap").value, 0, 32767);
+    const count = selectedStockCount();
+    for (let stock = 0; stock < count; stock++) {
+      const hold = stockHoldingOffset(stock, slot);
+      const current = u16(hold);
+      if (current > cap) {
+        const price = Math.max(0.01, f32(stockInfoOffset(stock) + 8));
+        setPlayerStock(stock, slot, cap, Math.round(price * cap));
+      }
+    }
+    syncStockMarketFromHoldings();
+    dirty = true;
+    showEstimatedPriceIndex();
+  }
+  function applyPriceFriendlyMode() {
+    capHumanStockAssets();
+    listUtilityStocksForHuman(clamp($("friendlyStockCap").value, 0, 32767));
+    const estimate = estimatePriceIndexValue();
+    const human = humanSlot();
+    const humanAssetsNow = playerLiquidAssets(human) + playerStockMarketValue(human);
+    const othersAssets = estimate.totalAssets - humanAssetsNow;
+    const targetIndex = Number($("targetPriceIndex").value) || 1.5;
+    const targetTotalAssets = targetIndex * 200000 * Math.max(1, estimate.activePlayers);
+    const humanStockValue = playerStockMarketValue(human);
+    const maxCash = clamp($("friendlyCashCap").value, 0, 2147483647);
+    const desiredHumanCash = Math.max(0, Math.round(targetTotalAssets - othersAssets - humanStockValue));
+    const cash = Math.min(maxCash, desiredHumanCash);
+    setPlayerNumbers(human, { cash, bank: 0 });
+    $("cash").value = String(cash);
+    $("bank").value = "0";
+    dirty = true;
+    renderPlayers();
+    showEstimatedPriceIndex();
+    $("priceIndexStatus").textContent += " 已应用物价友好模式：按目标指数调整我方现金，限制我方股票，并让自来水厂、电视公司、电力公司上市持股；未修改过路费和电脑资产。";
+  }
+  function setListedStockPrices() {
+    const count = selectedStockCount();
+    const price = Number($("stockPrice").value);
+    if (!Number.isFinite(price) || price <= 0) {
+      $("stockStatus").textContent = "请先输入要设置的统一股价。留空表示不修改股价。";
+      return;
+    }
+    for (let stock = 0; stock < count; stock++) {
+      const offset = stockInfoOffset(stock);
+      setF32(offset + 8, price);
+      setF32(offset + 12, price);
+    }
+    dirty = true;
+    $("stockStatus").textContent = `已把 ${count} 支股票今日价和昨日价设为 ${price}。`;
+    renderStockTable();
+  }
+  function findStockByNameIndex(nameIndex) {
+    const limit = Math.max(selectedStockCount(), 16);
+    for (let stock = 0; stock < Math.min(STOCK_MAX_SAFE, limit); stock++) {
+      if (u16(stockInfoOffset(stock)) === nameIndex) return stock;
+    }
+    for (let stock = 0; stock < STOCK_MAX_SAFE; stock++) {
+      if (u16(stockInfoOffset(stock)) === nameIndex) return stock;
+    }
+    return -1;
+  }
+  function listUtilityStocksForHuman(shareOverride = null) {
+    const human = humanSlot();
+    const desiredShares = shareOverride === null ? clamp($("stockShares").value, 0, 32767) : clamp(shareOverride, 0, 32767);
+    const manualPrice = Number($("stockPrice").value);
+    const utilityNameIndexes = [134, 132, 131];
+    let changed = 0;
+    for (const nameIndex of utilityNameIndexes) {
+      const stock = findStockByNameIndex(nameIndex);
+      if (stock < 0) continue;
+      const info = stockInfoOffset(stock);
+      const existingPrice = f32(info + 8);
+      const price = Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : (existingPrice > 0 ? existingPrice : 20);
+      const currentTotal = stockFloatTotals[stock] || (u16(info + 18) + totalHeldShares(stock));
+      const total = Math.max(currentTotal, desiredShares, 5000);
+      setI16(info + 2, 0);
+      if (u16(info + 4) === 0) setU16(info + 4, 1);
+      setF32(info + 8, price);
+      setF32(info + 12, price);
+      stockFloatTotals[stock] = Math.min(total, 32767);
+      const humanOldShares = u16(stockHoldingOffset(stock, human));
+      const othersHeld = totalHeldShares(stock) - humanOldShares;
+      const shares = Math.min(desiredShares, Math.max(0, stockFloatTotals[stock] - othersHeld));
+      setPlayerStock(stock, human, shares, clamp(Math.round(price * shares), 0, 2147483647));
+      const heldAfter = totalHeldShares(stock);
+      const floatingAfter = Math.max(0, stockFloatTotals[stock] - heldAfter);
+      setU16(info + 18, floatingAfter);
+      setU16(info + 16, Math.max(1, Math.min(shares || 1, Math.max(1, floatingAfter))));
+      changed++;
+    }
+    if (changed > 0) {
+      const maxIndex = Math.max(...utilityNameIndexes.map(findStockByNameIndex).filter(i => i >= 0)) + 1;
+      if (maxIndex > selectedStockCount()) $("stockCount").value = String(Math.min(maxIndex, STOCK_MAX_SAFE));
+    }
+    dirty = true;
+    renderStockTable();
+    $("stockStatus").textContent = `已处理 ${changed} 家公用事业：自来水厂、电视公司、电力公司。`;
+  }
+  function setStockMarketBatch() {
+    const count = selectedStockCount();
+    const volume = clamp($("stockVolume").value, 0, 32767);
+    const floating = clamp($("stockFloat").value, 0, 32767);
+    const days = clamp($("stockDays").value, -1, 32767);
+    for (let stock = 0; stock < count; stock++) {
+      const offset = stockInfoOffset(stock);
+      setI16(offset + 2, days);
+      setU16(offset + 16, volume);
+      setU16(offset + 18, floating);
+      stockFloatTotals[stock] = floating + totalHeldShares(stock);
+    }
+    dirty = true;
+    $("stockStatus").textContent = `已批量设置 ${count} 支股票的现量、流通量和上市天数，股价保持原值。`;
+    renderStockTable();
+  }
+  function selectedRentCount() {
+    return clamp($("rentCount").value, 1, RENT_MAX_SAFE);
+  }
+  function rentOffset(recordIndex, level) {
+    return RENT_TABLE + recordIndex * RENT_RECORD_STRIDE + level * 4;
+  }
+  function renderRentTable() {
+    if (!bytes) return;
+    const count = selectedRentCount();
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const cells = [];
+      for (let level = 0; level < 6; level++) {
+        cells.push(`<td><input class="stock-cost" data-rent="${i}" data-level="${level}" type="number" min="0" max="2147483647" value="${i32(rentOffset(i, level))}"></td>`);
+      }
+      rows.push(`<tr><td>${i + 1}</td>${cells.join("")}</tr>`);
+    }
+    $("rentRows").innerHTML = rows.join("");
+    $("rentStatus").textContent = `已显示 ${count} 条土地过路费记录。`;
+  }
+  function applyRentTableToBytes() {
+    const count = selectedRentCount();
+    for (let i = 0; i < count; i++) {
+      for (let level = 0; level < 6; level++) {
+        const input = document.querySelector(`#rentRows input[data-rent="${i}"][data-level="${level}"]`);
+        setI32(rentOffset(i, level), input.value);
+      }
+    }
+    dirty = true;
+    $("rentStatus").textContent = `已应用 ${count} 条土地过路费表格。`;
+  }
+  function setRentBatch(zero = false) {
+    const count = selectedRentCount();
+    const v0 = zero ? 0 : clamp($("rent0").value, 0, 2147483647);
+    const v1 = zero ? 0 : clamp($("rent1").value, 0, 2147483647);
+    const v5 = zero ? 0 : clamp($("rent5").value, 0, 2147483647);
+    for (let i = 0; i < count; i++) {
+      for (let level = 0; level < 6; level++) {
+        const value = level === 0 ? v0 : level === 5 ? v5 : Math.round(v1 + (v5 - v1) * ((level - 1) / 4));
+        setI32(rentOffset(i, level), value);
+      }
+    }
+    dirty = true;
+    renderRentTable();
+    $("rentStatus").textContent = zero ? `已清零 ${count} 条土地过路费。` : `已批量设置 ${count} 条土地过路费。`;
+  }
+  function selectedLandCount() {
+    return clamp($("landCount").value, 1, LAND_MAX_SAFE);
+  }
+  function landOffset(recordIndex) {
+    return LAND_TABLE + recordIndex * LAND_RECORD_STRIDE;
+  }
+  function renderLandTable() {
+    if (!bytes) return;
+    const count = selectedLandCount();
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const offset = landOffset(i);
+      rows.push(`<tr>
+        <td>${i + 1}</td>
+        <td><input class="stock-cost" data-land="${i}" data-field="price" type="number" value="${i32(offset)}" disabled></td>
+        <td><input class="stock-cost" data-land="${i}" data-field="housePrice" type="number" value="${i32(offset + 4)}" disabled></td>
+        <td><input class="stock-small" data-land="${i}" data-field="unknown" type="number" value="${u16(offset + 8)}" disabled></td>
+        <td><input class="stock-small" data-land="${i}" data-field="owner" type="number" value="${u16(offset + 10)}" disabled></td>
+      </tr>`);
+    }
+    $("landRows").innerHTML = rows.join("");
+    $("landStatus").textContent = `已显示 ${count} 条土地/公司记录。`;
+  }
+  function applyLandTableToBytes() {
+    const count = selectedLandCount();
+    for (let i = 0; i < count; i++) {
+      const offset = landOffset(i);
+      const get = (field) => document.querySelector(`#landRows input[data-land="${i}"][data-field="${field}"]`).value;
+      setI32(offset, get("price"));
+      setI32(offset + 4, get("housePrice"));
+      setU16(offset + 8, get("unknown"));
+      setU16(offset + 10, get("owner"));
+    }
+    dirty = true;
+    $("landStatus").textContent = `已应用 ${count} 条土地/公司表格。`;
+  }
+  function setAllLandOwner(owner) {
+    const count = selectedLandCount();
+    for (let i = 0; i < count; i++) setU16(landOffset(i) + 10, owner);
+    dirty = true;
+    renderLandTable();
+    $("landStatus").textContent = owner === 0 ? `已将 ${count} 条记录设为无人拥有。` : `已将 ${count} 条记录归给第 ${owner} 位玩家。`;
+  }
+  function ownAllLandByHuman() {
+    const humanOwner = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1) + 1;
+    setAllLandOwner(humanOwner);
+  }
+  function clearComputerOwnedLand() {
+    const start = clamp($("computerStart").value, 0, PLAYER_COUNT - 1);
+    const total = clamp($("computerCount").value, 0, PLAYER_COUNT);
+    const humanOwner = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1) + 1;
+    const computerOwners = new Set();
+    for (let slot = start; slot < Math.min(PLAYER_COUNT, start + total); slot++) {
+      const owner = slot + 1;
+      if (owner !== humanOwner) computerOwners.add(owner);
+    }
+    const count = selectedLandCount();
+    let changed = 0;
+    for (let i = 0; i < count; i++) {
+      const offset = landOffset(i) + 10;
+      if (computerOwners.has(u16(offset))) {
+        setU16(offset, 0);
+        changed++;
+      }
+    }
+    dirty = true;
+    renderLandTable();
+    $("landStatus").textContent = `已清空电脑拥有的 ${changed} 条土地/公司记录。`;
+  }
+  function setLandPriceBatch() {
+    const count = selectedLandCount();
+    const price = clamp($("landPrice").value, 0, 2147483647);
+    const housePrice = clamp($("landHousePrice").value, 0, 2147483647);
+    for (let i = 0; i < count; i++) {
+      const offset = landOffset(i);
+      setI32(offset, price);
+      setI32(offset + 4, housePrice);
+    }
+    dirty = true;
+    renderLandTable();
+    $("landStatus").textContent = `已批量设置 ${count} 条记录的地价和房价。`;
+  }
+  function cleanWordText(text) {
+    return text.replace(/\0/g, "").replace(/[\x00-\x1F]+/g, "").trim();
+  }
+  function decodeWordRecord(bytesPart) {
+    const decoders = ["big5", "gbk", "utf-8"];
+    for (const encoding of decoders) {
+      try {
+        const text = cleanWordText(new TextDecoder(encoding).decode(bytesPart));
+        if (text && !text.includes("�")) return text;
+      } catch (_) {}
+    }
+    return "";
+  }
+  async function loadWordDat(file) {
+    const buffer = await file.arrayBuffer();
+    const raw = new Uint8Array(buffer);
+    const count = selectedStockCount();
+    const candidateLengths = [12, 10];
+    let best = {};
+    let bestHits = -1;
+    for (const recordLength of candidateLengths) {
+      const names = {};
+      let hits = 0;
+      for (let stock = 0; stock < count; stock++) {
+        const nameIndex = u16(stockInfoOffset(stock));
+        const start = (nameIndex - 1) * recordLength;
+        if (start < 0 || start + recordLength > raw.length) continue;
+        const name = decodeWordRecord(raw.slice(start, start + recordLength));
+        if (name) {
+          names[nameIndex] = name;
+          hits++;
+        }
+      }
+      if (hits > bestHits) {
+        best = names;
+        bestHits = hits;
+      }
+    }
+    wordDatNames = best;
+    renderStockTable();
+    $("stockStatus").textContent = `已从 WORD.DAT 读取 ${Math.max(0, bestHits)} 个股票名称。`;
+  }
+
+  function setDateAndTurn() {
+    setI32(HEADER_CURRENT_PLAYER, clamp($("turnPlayer").value, 1, PLAYER_COUNT));
+    setU16(HEADER_YEAR, clamp($("year").value, 1996, 2099));
+    setU16(HEADER_MONTH, clamp($("month").value, 1, 12));
+    setU16(HEADER_DAY, clamp($("day").value, 1, 31));
+    setU16(HEADER_WEEKDAY, 1);
+    dirty = true;
+    $("advancedStatus").textContent = "已修改日期和当前回合玩家。";
+  }
+  function setPositionAndVehicle() {
+    const slot = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+    const base = playerBase(slot);
+    setU16(base + playerOffsets.x, clamp($("posX").value, 0, 49));
+    setU16(base + playerOffsets.y, clamp($("posY").value, 0, 49));
+    setVehicle(slot, clamp($("vehicle").value, 0, 2));
+    dirty = true;
+    $("advancedStatus").textContent = `已修改玩家 ${slot + 1} 的坐标和交通工具。`;
+  }
+  function clearHumanBadStatus() {
+    const slot = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+    clearStatusForPlayer(slot);
+    loadCurrentStatusInputs();
+    dirty = true;
+    $("advancedStatus").textContent = `已清除玩家 ${slot + 1} 的负面状态。`;
+  }
+  function applyCreditAndDebt() {
+    const slot = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+    const base = playerBase(slot);
+    setI32(base + playerOffsets.creditLimit, $("creditLimit").value);
+    setI32(base + playerOffsets.creditUsed, 0);
+    setU16(base + 0x48, 999);
+    setI32(base + playerOffsets.loan, 0);
+    dirty = true;
+    $("advancedStatus").textContent = `已提高玩家 ${slot + 1} 的信用并清空贷款。`;
+  }
+  function clearAllRoadEvents() {
+    for (let i = 0; i < ROAD_EVENT_COUNT; i++) {
+      const offset = ROAD_EVENTS + i * ROAD_EVENT_STRIDE;
+      setU16(offset, 0);
+      setU16(offset + 2, 0);
+      setU16(offset + 4, 0);
+    }
+    dirty = true;
+    $("advancedStatus").textContent = "已清空 9 组道路事件。";
+  }
+  function bankruptComputerPlayers() {
+    const start = clamp($("computerStart").value, 0, PLAYER_COUNT - 1);
+    const total = clamp($("computerCount").value, 0, PLAYER_COUNT);
+    const human = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
+    for (let slot = start; slot < Math.min(PLAYER_COUNT, start + total); slot++) {
+      if (slot === human) continue;
+      const base = playerBase(slot);
+      setI32(base + playerOffsets.cash, -1);
+      setI32(base + playerOffsets.bank, -1);
+      setI32(base + playerOffsets.coupon, 0);
+      clearStatusForPlayer(slot);
+    }
+    dirty = true;
+    renderPlayers();
+    $("advancedStatus").textContent = "已标记电脑在次日破产。";
+  }
+
+  function afterChange(message) {
+    renderPlayers();
+    clearDownloadLink();
+    setStatus(`<span class="ok">${message}</span> 尚未写回磁盘，请点击“保存 / 另存为”或“下载修改版”。`);
+  }
+
+  function configurableIds() {
+    return [
+      "humanSlot", "cash", "bank", "coupon", "itemCount", "poolCount", "computerStart", "computerCount",
+      "stockCount", "stockShares", "stockPrice", "stockVolume", "stockFloat", "stockDays",
+      "targetPriceIndex", "friendlyCashCap", "friendlyStockCap",
+      "rentCount", "rent0", "rent1", "rent5",
+      "turnPlayer", "year", "month", "day", "posX", "posY", "vehicle", "creditLimit",
+      "jailDays", "hospitalDays", "sleepDays", "sleepwalkDays", "godType", "godTurns", "statusPreset"
+    ];
+  }
+  function saveCurrentSettings() {
+    const settings = {};
+    for (const id of configurableIds()) settings[id] = $(id).value;
+    localStorage.setItem(settingsKey, JSON.stringify(settings));
+    $("settingsStatus").value = "配置已保存";
+    setStatus(`<span class="ok">已保存当前页面配置。</span> 下次打开可点击“读取配置”恢复。`);
+  }
+  function loadSavedSettings(silent = false) {
+    const raw = localStorage.getItem(settingsKey);
+    if (!raw) {
+      if (!silent) setStatus(`<span class="danger">没有找到已保存的配置。</span>`);
+      return;
+    }
+    const settings = JSON.parse(raw);
+    for (const id of configurableIds()) {
+      if ($(id) && settings[id] !== undefined) $(id).value = settings[id];
+    }
+    $("settingsStatus").value = "已读取配置";
+    if (!silent) setStatus(`<span class="ok">已读取保存的配置。</span>`);
+    if (bytes) {
+      renderStockTable();
+      renderRentTable();
+    }
+  }
+
+  async function openWithPicker() {
+    if (!window.showOpenFilePicker) {
+      setStatus(`<span class="danger">当前浏览器不支持高级打开，请用“选择存档”，修改后另存为或下载新版。</span>`);
+      return;
+    }
+    const [handle] = await window.showOpenFilePicker({
+      multiple: false,
+      types: [{ description: "大富翁3存档", accept: { "application/octet-stream": [".sav", ".SAV"] } }]
+    });
+    await loadFile(await handle.getFile(), handle);
+  }
+
+  async function saveOverwrite() {
+    if (!bytes) return;
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: fileName || "1.SAV",
+          types: [{ description: "大富翁3存档", accept: { "application/octet-stream": [".sav", ".SAV"] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(bytes);
+        await writable.close();
+        fileHandle = handle;
+        fileName = handle.name || fileName;
+        $("selectedFileName").textContent = fileName;
+        dirty = false;
+        clearDownloadLink();
+        setStatus(`<span class="ok">已保存 ${fileName}。</span>`);
+        return;
+      } catch (err) {
+        makeDownloadLink(false);
+        setStatus(`<span class="danger">当前环境不允许系统另存为：${err.message}</span> 已生成手动下载链接。`);
+        return;
+      }
+    }
+    downloadFile();
+  }
+
+  async function saveDirectOverwrite() {
+    if (!bytes) return;
+    if (!fileHandle || !fileHandle.createWritable) {
+      setStatus(`<span class="danger">直接覆盖保存需要使用“高级打开”选择存档。普通“选择存档”只能另存为或下载。</span>`);
+      return;
+    }
+    try {
+      const writable = await fileHandle.createWritable();
+      await writable.write(bytes);
+      await writable.close();
+      dirty = false;
+      clearDownloadLink();
+      setStatus(`<span class="ok">已直接覆盖保存 ${fileName}。</span>`);
+    } catch (err) {
+      makeDownloadLink(false);
+      setStatus(`<span class="danger">当前浏览器/平台禁止直接覆盖保存：${err.message}</span> 已生成手动下载链接。`);
+    }
+  }
+
+  function makeDownloadLink(autoClick) {
+    if (!bytes) return;
+    clearDownloadLink();
+    const blob = new Blob([bytes], { type: "application/octet-stream" });
+    downloadUrl = URL.createObjectURL(blob);
+    const base = fileName.replace(/\.sav$/i, "");
+    const outName = `${base}.modified.SAV`;
+    $("downloadArea").style.display = "block";
+    $("downloadArea").innerHTML = `手动下载：<a id="manualDownload" href="${downloadUrl}" download="${outName}">${outName}</a>`;
+    if (autoClick) setTimeout(() => $("manualDownload").click(), 0);
+  }
+  function downloadFile() {
+    makeDownloadLink(true);
+    setStatus(`<span class="ok">已生成下载链接。</span> 如果没有自动下载，请点击下方链接。替换原存档时把文件名改回原文件名。`);
+  }
+
+  $("openNative").addEventListener("click", () => openWithPicker().catch(err => setStatus(`<span class="danger">${err.message}</span>`)));
+  $("fileInput").addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) loadFile(file).catch(err => setStatus(`<span class="danger">${err.message}</span>`));
+  });
+  $("applyMoney").addEventListener("click", () => { applyHumanMoney(); afterChange("已修改我方现金、存款和点券。"); });
+  $("applyCards").addEventListener("click", () => { fillHumanCards(); refillCardPool(); afterChange("已补满我方卡片，并刷新卡片池。"); });
+  $("applyItems").addEventListener("click", () => { fillHumanItems(); afterChange("已补满我方 8 种道具并装备汽车。"); });
+  $("applyStatusCredit").addEventListener("click", () => { applyHumanStatusCredit(); afterChange("已清除我方负面状态、提高信用并清空贷款。"); });
+  $("clearComputers").addEventListener("click", () => { clearComputers(); afterChange("已清空电脑点券、卡片和道具。"); });
+  $("humanSlot").addEventListener("change", () => { loadCurrentPositionInputs(); loadCurrentStatusInputs(); });
+  $("applyStocks").addEventListener("click", () => { maxHumanStocks(); afterChange("已把我方持股设为指定数量。"); });
+  $("buyAllFloatStocks").addEventListener("click", () => { buyAllFloatingStocksForHuman(); afterChange("已买光我方可买的流通股。"); });
+  $("clearComputerStocks").addEventListener("click", () => { clearComputerStocks(); afterChange("已清空电脑股票。"); });
+  $("raiseStockPrices").addEventListener("click", () => { setListedStockPrices(); afterChange("已设置上市股价。"); });
+  $("applyStockMarketBatch").addEventListener("click", () => { setStockMarketBatch(); afterChange("已批量设置股票现量、流通量和上市天数，股价保持默认涨跌。"); });
+  $("listUtilityStocks").addEventListener("click", () => { listUtilityStocksForHuman(); afterChange("已让自来水厂、电视公司、电力公司上市并给我方持股。"); });
+  $("syncStockMarket").addEventListener("click", () => { syncStockMarketFromHoldings(); dirty = true; afterChange("已按持股同步股票现量和流通量。"); });
+  $("applyStockTable").addEventListener("click", () => { applyStockTableToBytes(); afterChange("已应用股票表格修改。"); });
+  $("stockCount").addEventListener("change", () => renderStockTable());
+  $("estimatePriceIndex").addEventListener("click", showEstimatedPriceIndex);
+  $("capHumanLiquidAssets").addEventListener("click", () => { capHumanLiquidAssets(); afterChange("已限制我方现金和存款，用于降低物价指数。"); });
+  $("capHumanStockAssets").addEventListener("click", () => { capHumanStockAssets(); afterChange("已限制我方股票持仓，用于降低物价指数。"); });
+  $("priceFriendlyMode").addEventListener("click", () => { applyPriceFriendlyMode(); afterChange("已应用物价友好模式。"); });
+  $("applyRentBatch").addEventListener("click", () => { setRentBatch(false); afterChange("已批量设置土地过路费。"); });
+  $("zeroRentBatch").addEventListener("click", () => { setRentBatch(true); afterChange("已清零土地过路费。"); });
+  $("applyRentTable").addEventListener("click", () => { applyRentTableToBytes(); afterChange("已应用土地过路费表格。"); });
+  $("rentCount").addEventListener("change", () => renderRentTable());
+  $("landCount").addEventListener("change", () => renderLandTable());
+  $("fillCardsFromCatalog").addEventListener("click", () => { fillHumanCards(); afterChange("已按强卡组合补满我方卡片。"); });
+  $("fillCardPoolFromCatalog").addEventListener("click", () => { refillCardPool(); dirty = true; afterChange("已补满全局卡片池。"); });
+  $("clearHumanCards").addEventListener("click", () => { clearHumanCardsOnly(); afterChange("已清空我方卡片。"); });
+  $("fillItemsFromCatalog").addEventListener("click", () => { fillHumanItems(); afterChange("已补满我方道具。"); });
+  $("clearHumanItems").addEventListener("click", () => { clearHumanItemsOnly(); afterChange("已清空我方道具。"); });
+  $("clearComputerInventoryFromCatalog").addEventListener("click", () => { clearComputers(); afterChange("已清空电脑卡片、道具和点券。"); });
+  $("wordDatInput").addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) loadWordDat(file).catch(err => { $("stockStatus").textContent = `读取 WORD.DAT 失败：${err.message}`; });
+  });
+  $("applyDate").addEventListener("click", () => { setDateAndTurn(); afterChange("已设置日期和回合。"); });
+  $("applyPosition").addEventListener("click", () => { setPositionAndVehicle(); afterChange("已设置位置和交通工具。"); });
+  $("applyTaskStatus").addEventListener("click", () => { applyTaskStatus(); afterChange("已应用任务/附身状态。"); });
+  $("clearHumanStatus").addEventListener("click", () => { clearHumanBadStatus(); afterChange("已清除我方负面状态。"); });
+  $("applyCredit").addEventListener("click", () => { applyCreditAndDebt(); afterChange("已提高信用并清空贷款。"); });
+  $("clearRoadEvents").addEventListener("click", () => { clearAllRoadEvents(); afterChange("已清空道路事件。"); });
+  $("bankruptComputers").addEventListener("click", () => { bankruptComputerPlayers(); afterChange("已标记电脑破产。"); });
+  $("saveDirect").addEventListener("click", () => saveDirectOverwrite().catch(err => {
+    makeDownloadLink(false);
+    setStatus(`<span class="danger">${err.message}</span> 已生成手动下载链接。`);
+  }));
+  $("saveNative").addEventListener("click", () => saveOverwrite().catch(err => {
+    makeDownloadLink(false);
+    setStatus(`<span class="danger">${err.message}</span> 已生成手动下载链接。`);
+  }));
+  $("download").addEventListener("click", downloadFile);
+  $("saveSettings").addEventListener("click", saveCurrentSettings);
+  $("loadSettings").addEventListener("click", () => loadSavedSettings(false));
+  window.addEventListener("beforeunload", (event) => {
+    if (dirty) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+
+  fillSelects();
+  renderCatalog();
+  loadSavedSettings(true);
+})();
+</script>
+</body>
+</html>
