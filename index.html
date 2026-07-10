@@ -99,6 +99,10 @@
       color: var(--primary);
       font-size: 12px;
     }
+    .category-tag { display: inline-flex; min-height: 24px; align-items: center; padding: 2px 7px; border-radius: 5px; font-size: 12px; white-space: nowrap; }
+    .category-utility { background: #e8f5ee; color: #176b45; }
+    .category-map { background: #fff3dc; color: #8a4b00; }
+    .category-market { background: #eef2f7; color: #344054; }
     .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .card-line {
       display: flex;
@@ -211,14 +215,14 @@
 
   <section class="panel section-gap">
     <h2>物价指数控制</h2>
-    <p class="small">目标指数决定期望资产，计算时先把我方现金补到现金上限，剩余目标资产再转为三家公用事业股票，因此实际股票占比可以超过设置值；关闭“超额现金强制转股票”后，股票占比才作为硬上限并截断目标资产。</p>
+    <p class="small">目标指数决定期望资产，计算时先把我方现金补到现金上限。股票预算会优先分配三家非上市公用事业（每家总股本上限 10000），剩余预算再平摊到其他上市公司。</p>
     <div class="fields">
       <label><span>目标指数</span><input id="targetPriceIndex" type="number" min="0.1" max="999" step="0.1" value="1.5"></label>
       <label><span>我方现金上限</span><input id="friendlyCashCap" type="number" min="0" max="2147483647" value="220000"></label>
       <label><span>股票资产占比上限（%）</span><input id="friendlyStockRatio" type="number" min="1" max="100" step="1" value="60"></label>
       <label><span>模式说明</span><input type="text" value="只改我方，不改电脑和过路费" disabled></label>
       <label class="check-field"><input id="overflowCashToStocks" type="checkbox" checked><span>超额现金强制转股票（允许突破占比）</span></label>
-      <label class="check-field"><input id="onlyIncreaseUtilityStocks" type="checkbox" checked><span>只调整三家公用事业，其他股票保持不变</span></label>
+      <label class="check-field"><input id="onlyIncreaseUtilityStocks" type="checkbox" checked><span>按 公用事业 ＞ 地图经营公司 ＞ 纯股市公司 分配</span></label>
     </div>
     <div class="toolbar section-gap">
       <button id="estimatePriceIndex" disabled>估算物价指数</button>
@@ -250,7 +254,7 @@
       <button id="clearComputerStocks" class="warn" disabled>清空电脑股票</button>
       <button id="raiseStockPrices" disabled>设置上市股价</button>
       <button id="applyStockMarketBatch" disabled>批量设置现量/上市</button>
-      <button id="listUtilityStocks" disabled>公用事业上市并持股</button>
+      <button id="listUtilityStocks" disabled>公用事业持股至上限</button>
       <button id="syncStockMarket" disabled>按持股同步现量</button>
       <button id="applyStockTable" class="primary" disabled>应用表格修改</button>
     </div>
@@ -261,7 +265,7 @@
       <table class="stock-table">
         <thead>
           <tr>
-            <th>#</th><th>股票名称</th><th>名称索引</th><th>剩余天</th><th>承销</th><th>今日价</th><th>昨日价</th><th>现量</th><th>流通量</th>
+            <th>#</th><th>类别</th><th>股票名称</th><th>名称索引</th><th>剩余天</th><th>承销</th><th>今日价</th><th>昨日价</th><th>现量</th><th>流通量</th>
           </tr>
         </thead>
         <tbody id="stockMarketRows"></tbody>
@@ -274,7 +278,7 @@
       <table class="holding-table">
         <thead>
           <tr>
-            <th>#</th><th>股票名称</th>
+            <th>#</th><th>类别</th><th>股票名称</th>
             <th>P1 股</th><th>P1 成本</th><th>P2 股</th><th>P2 成本</th><th>P3 股</th><th>P3 成本</th><th>P4 股</th><th>P4 成本</th><th>P5 股</th><th>P5 成本</th><th>P6 股</th><th>P6 成本</th>
           </tr>
         </thead>
@@ -489,6 +493,9 @@
     437: "顺成钢铁", 438: "大宇航空", 439: "宏宇服饰", 459: "大宇银行"
   };
   const UTILITY_NAME_INDEXES = [140, 139, 137];
+  const UTILITY_SHARE_CAP = 10000;
+  const MAP_COMPANY_NAME_INDEXES = [133, 434, 136, 132, 131, 138, 134];
+  const PURE_MARKET_NAME_INDEXES = [433, 459, 435, 436, 439, 437];
   const godTypes = [
     [0x00, "00h - 无"],
     [0x08, "08h - 财神"],
@@ -862,6 +869,21 @@
   function stockDisplayName(nameIndex, stockIndex) {
     return wordDatNames[nameIndex] || stockNameByIndex[nameIndex] || `股票${stockIndex + 1}`;
   }
+  function stockCategory(nameIndex) {
+    if (UTILITY_NAME_INDEXES.includes(nameIndex)) return { key: "utility", label: "公共事业公司", rank: 0 };
+    if (MAP_COMPANY_NAME_INDEXES.includes(nameIndex)) return { key: "map", label: "地图经营公司", rank: 1 };
+    if (PURE_MARKET_NAME_INDEXES.includes(nameIndex)) return { key: "market", label: "纯股市公司", rank: 2 };
+    return { key: "market", label: "其他股票", rank: 3 };
+  }
+  function sortedStockIndexes(count) {
+    return Array.from({ length: count }, (_, index) => index).sort((a, b) => {
+      const categoryDiff = stockCategory(u16(stockInfoOffset(a))).rank - stockCategory(u16(stockInfoOffset(b))).rank;
+      return categoryDiff || a - b;
+    });
+  }
+  function stockCategoryTag(category) {
+    return `<span class="category-tag category-${category.key}">${category.label}</span>`;
+  }
   function readStock(stockIndex) {
     const offset = stockInfoOffset(stockIndex);
     const row = {
@@ -880,6 +902,7 @@
       row.players.push({ shares: u16(hold), cost: i32(hold + 2) });
     }
     row.name = stockDisplayName(row.nameIndex, stockIndex);
+    row.category = stockCategory(row.nameIndex);
     return row;
   }
   function renderStockTable() {
@@ -887,7 +910,7 @@
     const count = selectedStockCount();
     const marketRows = [];
     const holdingRows = [];
-    for (let s = 0; s < count; s++) {
+    for (const s of sortedStockIndexes(count)) {
       const stock = readStock(s);
       const playerCells = stock.players.map((p, idx) => `
         <td><input class="stock-num" data-stock="${s}" data-player="${idx}" data-field="shares" type="number" min="0" max="32767" value="${p.shares}"></td>
@@ -895,6 +918,7 @@
       `).join("");
       marketRows.push(`<tr>
         <td>${s + 1}</td>
+        <td>${stockCategoryTag(stock.category)}</td>
         <td><input class="stock-name" data-stock="${s}" data-field="name" value="${stock.name}"></td>
         <td><input class="stock-small" data-stock="${s}" data-field="nameIndex" type="number" min="0" max="65535" value="${stock.nameIndex}"></td>
         <td><input class="stock-small" data-stock="${s}" data-field="days" type="number" min="-1" max="9999" value="${stock.days}"></td>
@@ -906,6 +930,7 @@
       </tr>`);
       holdingRows.push(`<tr>
         <td>${s + 1}</td>
+        <td>${stockCategoryTag(stock.category)}</td>
         <td>${stock.name}</td>
         ${playerCells}
       </tr>`);
@@ -945,12 +970,44 @@
     for (let p = 0; p < PLAYER_COUNT; p++) held += u16(stockHoldingOffset(stock, p));
     return held;
   }
+  function isUtilityStock(stock) {
+    return UTILITY_NAME_INDEXES.includes(u16(stockInfoOffset(stock)));
+  }
+  function utilityStockIndexes() {
+    return UTILITY_NAME_INDEXES.map(findStockByNameIndex).filter(stock => stock >= 0);
+  }
+  function capUtilityHoldings(stock) {
+    let remaining = UTILITY_SHARE_CAP;
+    for (let player = 0; player < PLAYER_COUNT; player++) {
+      const offset = stockHoldingOffset(stock, player);
+      const oldShares = u16(offset);
+      const shares = Math.min(oldShares, remaining);
+      if (shares !== oldShares) {
+        const oldCost = Math.max(0, i32(offset + 2));
+        setPlayerStock(stock, player, shares, oldShares > 0 ? Math.round(oldCost * shares / oldShares) : 0);
+      }
+      remaining -= shares;
+    }
+  }
+  function keepUtilityUnlisted(stock) {
+    capUtilityHoldings(stock);
+    const info = stockInfoOffset(stock);
+    setI16(info + 2, -1);
+    setU16(info + 16, 0);
+    setU16(info + 18, 0);
+    stockFloatTotals[stock] = UTILITY_SHARE_CAP;
+  }
+  function enforceAllUtilitiesUnlisted() {
+    for (const stock of utilityStockIndexes()) keepUtilityUnlisted(stock);
+  }
   function captureStockFloatTotals() {
     stockFloatTotals = [];
     const count = selectedStockCount();
     for (let stock = 0; stock < count; stock++) {
       const info = stockInfoOffset(stock);
-      stockFloatTotals[stock] = u16(info + 18) + totalHeldShares(stock);
+      stockFloatTotals[stock] = isUtilityStock(stock)
+        ? UTILITY_SHARE_CAP
+        : u16(info + 18) + totalHeldShares(stock);
     }
   }
   function applyStockTableToBytes() {
@@ -982,7 +1039,9 @@
       }
     }
     for (let stock = 0; stock < count; stock++) {
-      stockFloatTotals[stock] = u16(stockInfoOffset(stock) + 18) + totalHeldShares(stock);
+      stockFloatTotals[stock] = isUtilityStock(stock)
+        ? UTILITY_SHARE_CAP
+        : u16(stockInfoOffset(stock) + 18) + totalHeldShares(stock);
     }
     syncStockMarketFromHoldings();
     dirty = true;
@@ -991,6 +1050,10 @@
   function syncStockMarketFromHoldings() {
     const count = selectedStockCount();
     for (let stock = 0; stock < count; stock++) {
+      if (isUtilityStock(stock)) {
+        keepUtilityUnlisted(stock);
+        continue;
+      }
       const held = totalHeldShares(stock);
       const info = stockInfoOffset(stock);
       const total = stockFloatTotals[stock] || (u16(info + 18) + held);
@@ -998,8 +1061,9 @@
       setU16(info + 18, floating);
       setU16(info + 16, Math.min(u16(info + 16), floating));
     }
+    enforceAllUtilitiesUnlisted();
     renderStockTable();
-    $("stockStatus").textContent = `已按玩家持股同步 ${count} 支股票的现量和流通量。`;
+    $("stockStatus").textContent = `已按玩家持股同步其他股票；三家公用事业已强制保持非上市、现量 0、流通量 0。`;
   }
   function setPlayerStock(stockIndex, playerSlot, shares, cost) {
     const offset = stockHoldingOffset(stockIndex, playerSlot);
@@ -1009,10 +1073,16 @@
   function ensureAllStocksListed() {
     const count = Math.max(selectedStockCount(), namedStockCount());
     $("stockCount").value = String(count);
-    const knownTotals = stockFloatTotals.slice(0, count).filter(total => Number.isFinite(total) && total > 0).sort((a, b) => a - b);
+    const knownTotals = [];
+    for (let stock = 0; stock < count; stock++) {
+      const total = stockFloatTotals[stock];
+      if (!isUtilityStock(stock) && Number.isFinite(total) && total > 0) knownTotals.push(total);
+    }
+    knownTotals.sort((a, b) => a - b);
     const medianTotal = knownTotals.length ? knownTotals[Math.floor(knownTotals.length / 2)] : 10000;
     const knownPrices = [];
     for (let stock = 0; stock < count; stock++) {
+      if (isUtilityStock(stock)) continue;
       const price = f32(stockInfoOffset(stock) + 8);
       if (Number.isFinite(price) && price > 0) knownPrices.push(price);
     }
@@ -1020,10 +1090,17 @@
     const medianPrice = knownPrices.length ? knownPrices[Math.floor(knownPrices.length / 2)] : 20;
     let newlyListed = 0;
     for (let stock = 0; stock < count; stock++) {
+      if (isUtilityStock(stock)) {
+        keepUtilityUnlisted(stock);
+        continue;
+      }
       const info = stockInfoOffset(stock);
       const wasUnlisted = i16(info + 2) < 0 || !(stockFloatTotals[stock] > 0);
       const price = f32(info + 8) > 0 ? f32(info + 8) : medianPrice;
-      const total = Math.min(32767, Math.max(stockFloatTotals[stock] || 0, totalHeldShares(stock), medianTotal, 5000));
+      const existingTotal = stockFloatTotals[stock] || 0;
+      const total = Math.min(32767, existingTotal > 0
+        ? Math.max(existingTotal, totalHeldShares(stock))
+        : Math.max(totalHeldShares(stock), medianTotal, 5000));
       stockFloatTotals[stock] = total;
       setI16(info + 2, 0);
       if (u16(info + 4) === 0) setU16(info + 4, 1);
@@ -1045,16 +1122,23 @@
       const info = stockInfoOffset(stock);
       const price = Math.max(0.01, f32(info + 8));
       const humanOldShares = u16(stockHoldingOffset(stock, human));
-      const total = stockFloatTotals[stock] || (u16(info + 18) + totalHeldShares(stock));
+      const total = isUtilityStock(stock)
+        ? UTILITY_SHARE_CAP
+        : stockFloatTotals[stock] || (u16(info + 18) + totalHeldShares(stock));
       const othersHeld = totalHeldShares(stock) - humanOldShares;
       const shares = Math.min(desiredShares, Math.max(0, total - othersHeld));
       const cost = clamp(Math.round(price * shares), 0, 2147483647);
       setPlayerStock(stock, human, shares, cost);
+      if (isUtilityStock(stock)) {
+        keepUtilityUnlisted(stock);
+        continue;
+      }
       const heldAfter = totalHeldShares(stock);
       const floating = Math.max(0, total - heldAfter);
       setU16(info + 18, floating);
       setU16(info + 16, Math.min(u16(info + 16), floating));
     }
+    enforceAllUtilitiesUnlisted();
     dirty = true;
     $("stockStatus").textContent = `已按每支股票真实流通盘设置玩家 ${human + 1} 的持股，并同步成本和流通量。`;
     renderStockTable();
@@ -1064,6 +1148,10 @@
     const listed = ensureAllStocksListed();
     const count = listed.count;
     for (let stock = 0; stock < count; stock++) {
+      if (isUtilityStock(stock)) {
+        keepUtilityUnlisted(stock);
+        continue;
+      }
       const info = stockInfoOffset(stock);
       const price = Math.max(0.01, f32(info + 8));
       const humanOldShares = u16(stockHoldingOffset(stock, human));
@@ -1074,9 +1162,10 @@
       setU16(info + 18, 0);
       setU16(info + 16, 0);
     }
+    enforceAllUtilitiesUnlisted();
     dirty = true;
     renderStockTable();
-    $("stockStatus").textContent = `已让玩家 ${human + 1} 买光全部 ${count} 支股票的可流通股（新上市 ${listed.newlyListed} 支），包含来来饭店、凯悦饭店、中华航空；现量/流通量已归零。`;
+    $("stockStatus").textContent = `已让玩家 ${human + 1} 买光其他上市公司的可流通股（新上市 ${listed.newlyListed} 支）；三家公用事业保持非上市且持股不变。`;
   }
   function clearComputerStocks() {
     const start = clamp($("computerStart").value, 0, PLAYER_COUNT - 1);
@@ -1173,8 +1262,16 @@
   function allocateAllHumanStocksByBudget(stockBudget) {
     const listed = ensureAllStocksListed();
     const human = humanSlot();
+    const utilityStocks = new Set(utilityStockIndexes());
+    let preservedUtilityValue = 0;
+    for (const stock of utilityStocks) {
+      preservedUtilityValue += u16(stockHoldingOffset(stock, human)) * Math.max(0, f32(stockInfoOffset(stock) + 8));
+    }
+    preservedUtilityValue = Math.round(preservedUtilityValue);
+    const regularBudget = Math.max(0, stockBudget - preservedUtilityValue);
     const candidates = [];
     for (let stock = 0; stock < listed.count; stock++) {
+      if (utilityStocks.has(stock)) continue;
       const info = stockInfoOffset(stock);
       const price = Math.max(0.01, f32(info + 8));
       const humanOldShares = u16(stockHoldingOffset(stock, human));
@@ -1184,8 +1281,8 @@
     }
 
     const minimumAllStockCost = candidates.reduce((sum, item) => sum + (item.maxShares > 0 ? item.price : 0), 0);
-    const canHoldEveryStock = stockBudget >= minimumAllStockCost;
-    let remainingBudget = stockBudget;
+    const canHoldEveryStock = regularBudget >= minimumAllStockCost;
+    let remainingBudget = regularBudget;
     for (const item of candidates) {
       item.shares = canHoldEveryStock && item.maxShares > 0 ? 1 : 0;
       remainingBudget -= item.shares * item.price;
@@ -1215,50 +1312,118 @@
       setU16(item.info + 16, floating > 0 ? Math.min(floating, currentVolume || Math.max(1, Math.round(item.total * 0.1))) : 0);
     }
     const stockValue = playerStockMarketValue(human);
-    const heldCount = candidates.filter(item => item.shares > 0).length;
+    let heldCount = 0;
+    for (let stock = 0; stock < listed.count; stock++) {
+      if (u16(stockHoldingOffset(stock, human)) > 0) heldCount++;
+    }
     dirty = true;
     renderStockTable();
-    $("stockStatus").textContent = `已按资产预算动态分配全部 ${listed.count} 支股票：我方持有 ${heldCount} 支，新上市 ${listed.newlyListed} 支，股票市值约 ${stockValue}。`;
-    return { ...listed, stockValue, heldCount, ownershipRatio, utilityOnly: false, preservedValueExceeded: false };
+    $("stockStatus").textContent = `已按预算平摊其他上市公司；三家公用事业保持非上市，当前股票市值约 ${stockValue}。`;
+    return {
+      ...listed, stockValue, heldCount, ownershipRatio, utilityOnly: false,
+      preservedValueExceeded: preservedUtilityValue > stockBudget,
+      preservedUtilityValue
+    };
   }
-  function allocateUtilityStocksByBudget(stockBudget) {
+  function allocateStockTier(candidates, budget) {
+    const maximumValue = candidates.reduce((sum, item) => sum + item.maxShares * item.price, 0);
+    const ratio = maximumValue > 0 ? Math.min(1, Math.max(0, budget) / maximumValue) : 0;
+    let used = 0;
+    for (const item of candidates) {
+      item.shares = Math.floor(item.maxShares * ratio);
+      used += item.shares * item.price;
+    }
+    let remaining = Math.max(0, budget - used);
+    for (const item of [...candidates].sort((a, b) => a.price - b.price)) {
+      if (item.shares < item.maxShares && item.price <= remaining) {
+        item.shares++;
+        used += item.price;
+        remaining -= item.price;
+      }
+    }
+    return { used, ratio, full: ratio >= 1 };
+  }
+  function allocatePrioritizedRegularStocksByBudget(stockBudget) {
+    const listed = ensureAllStocksListed();
+    const human = humanSlot();
+    const utilityStocks = new Set(utilityStockIndexes());
+    let utilityValue = 0;
+    for (const stock of utilityStocks) {
+      utilityValue += u16(stockHoldingOffset(stock, human)) * Math.max(0, f32(stockInfoOffset(stock) + 8));
+    }
+    utilityValue = Math.round(utilityValue);
+    let remainingBudget = Math.max(0, stockBudget - utilityValue);
+    const candidates = [];
+    for (let stock = 0; stock < listed.count; stock++) {
+      if (utilityStocks.has(stock)) continue;
+      const info = stockInfoOffset(stock);
+      const price = Math.max(0.01, f32(info + 8));
+      const humanOldShares = u16(stockHoldingOffset(stock, human));
+      const othersHeld = Math.max(0, totalHeldShares(stock) - humanOldShares);
+      const total = stockFloatTotals[stock] || (u16(info + 18) + totalHeldShares(stock));
+      candidates.push({
+        stock, info, price, total, shares: 0,
+        maxShares: Math.max(0, total - othersHeld),
+        category: stockCategory(u16(info))
+      });
+    }
+    const mapCompanies = candidates.filter(item => item.category.rank === 1);
+    const pureMarket = candidates.filter(item => item.category.rank === 2);
+    const otherStocks = candidates.filter(item => item.category.rank > 2);
+    const mapResult = allocateStockTier(mapCompanies, remainingBudget);
+    remainingBudget = Math.max(0, remainingBudget - mapResult.used);
+    const marketResult = allocateStockTier(pureMarket, remainingBudget);
+    remainingBudget = Math.max(0, remainingBudget - marketResult.used);
+    const otherResult = allocateStockTier(otherStocks, remainingBudget);
+
+    for (const item of candidates) {
+      setPlayerStock(item.stock, human, item.shares, clamp(Math.round(item.price * item.shares), 0, 2147483647));
+      const floating = Math.max(0, item.total - totalHeldShares(item.stock));
+      setU16(item.info + 18, floating);
+      const currentVolume = u16(item.info + 16);
+      setU16(item.info + 16, floating > 0 ? Math.min(floating, currentVolume || Math.max(1, Math.round(item.total * 0.1))) : 0);
+    }
+    enforceAllUtilitiesUnlisted();
+    const mapCompanyValue = Math.round(mapCompanies.reduce((sum, item) => sum + item.shares * item.price, 0));
+    const pureMarketValue = Math.round(pureMarket.reduce((sum, item) => sum + item.shares * item.price, 0));
+    const stockValue = playerStockMarketValue(human);
+    let heldCount = 0;
+    for (let stock = 0; stock < listed.count; stock++) {
+      if (u16(stockHoldingOffset(stock, human)) > 0) heldCount++;
+    }
+    dirty = true;
+    renderStockTable();
+    return {
+      ...listed, stockValue, heldCount, utilityOnly: true,
+      utilityValue, mapCompanyValue, pureMarketValue,
+      mapTierFull: mapResult.full,
+      marketTierFull: marketResult.full,
+      preservedValueExceeded: utilityValue > stockBudget,
+      ownershipRatio: mapResult.ratio || marketResult.ratio || otherResult.ratio
+    };
+  }
+  function allocateUtilityHoldingsByBudget(stockBudget, shareLimit = UTILITY_SHARE_CAP) {
     const human = humanSlot();
     const count = Math.max(selectedStockCount(), namedStockCount());
     $("stockCount").value = String(count);
-    const utilityStocks = new Set(UTILITY_NAME_INDEXES.map(findStockByNameIndex).filter(stock => stock >= 0));
-    let preservedStockValue = 0;
-    for (let stock = 0; stock < count; stock++) {
-      if (utilityStocks.has(stock)) continue;
-      preservedStockValue += u16(stockHoldingOffset(stock, human)) * Math.max(0, f32(stockInfoOffset(stock) + 8));
-    }
-    preservedStockValue = Math.round(preservedStockValue);
     const candidates = [];
-    let newlyListed = 0;
     for (const nameIndex of UTILITY_NAME_INDEXES) {
       const stock = findStockByNameIndex(nameIndex);
       if (stock < 0 || stock >= count) continue;
       const info = stockInfoOffset(stock);
-      const wasUnlisted = i16(info + 2) < 0 || !(stockFloatTotals[stock] > 0);
-      const price = f32(info + 8) > 0 ? f32(info + 8) : 20;
+      keepUtilityUnlisted(stock);
+      const price = Math.max(0.01, f32(info + 8));
       const humanShares = u16(stockHoldingOffset(stock, human));
       const othersHeld = Math.max(0, totalHeldShares(stock) - humanShares);
-      const total = 32767;
-      stockFloatTotals[stock] = total;
-      setI16(info + 2, 0);
-      if (u16(info + 4) === 0) setU16(info + 4, 1);
-      setF32(info + 8, price);
-      if (!(f32(info + 12) > 0)) setF32(info + 12, price);
-      candidates.push({ stock, info, price, total, shares: 0, maxShares: Math.max(0, total - othersHeld) });
-      if (wasUnlisted) newlyListed++;
+      const maxShares = Math.min(clamp(shareLimit, 0, UTILITY_SHARE_CAP), Math.max(0, UTILITY_SHARE_CAP - othersHeld));
+      candidates.push({ stock, info, price, shares: 0, maxShares });
     }
-
-    let remainingBudget = Math.max(0, stockBudget - preservedStockValue);
-    const maxExtraValue = candidates.reduce((sum, item) => sum + (item.maxShares - item.shares) * item.price, 0);
-    const ownershipRatio = maxExtraValue > 0 ? Math.min(1, remainingBudget / maxExtraValue) : 0;
+    let remainingBudget = Math.max(0, stockBudget);
+    const maximumValue = candidates.reduce((sum, item) => sum + item.maxShares * item.price, 0);
+    const ownershipRatio = maximumValue > 0 ? Math.min(1, remainingBudget / maximumValue) : 0;
     for (const item of candidates) {
-      const extra = Math.floor((item.maxShares - item.shares) * ownershipRatio);
-      item.shares += extra;
-      remainingBudget -= extra * item.price;
+      item.shares = Math.floor(item.maxShares * ownershipRatio);
+      remainingBudget -= item.shares * item.price;
     }
     for (const item of [...candidates].sort((a, b) => a.price - b.price)) {
       if (item.shares < item.maxShares && item.price <= remainingBudget) {
@@ -1269,24 +1434,26 @@
 
     for (const item of candidates) {
       setPlayerStock(item.stock, human, item.shares, clamp(Math.round(item.price * item.shares), 0, 2147483647));
-      const floating = Math.max(0, item.total - totalHeldShares(item.stock));
-      setU16(item.info + 18, floating);
-      const currentVolume = u16(item.info + 16);
-      setU16(item.info + 16, floating > 0 ? Math.min(floating, currentVolume || Math.max(1, Math.round(item.total * 0.1))) : 0);
+      keepUtilityUnlisted(item.stock);
     }
-    const stockValue = playerStockMarketValue(human);
-    let heldCount = 0;
-    for (let stock = 0; stock < count; stock++) {
-      if (u16(stockHoldingOffset(stock, human)) > 0) heldCount++;
-    }
+    return {
+      count, ownershipRatio,
+      utilityValue: Math.round(candidates.reduce((sum, item) => sum + item.shares * item.price, 0)),
+      utilityCappedCount: candidates.filter(item => item.shares === item.maxShares).length,
+      utilityCount: candidates.length
+    };
+  }
+  function allocateUtilityStocksByBudget(stockBudget) {
+    const utility = allocateUtilityHoldingsByBudget(stockBudget);
+    const allocation = allocatePrioritizedRegularStocksByBudget(stockBudget);
+    allocation.utilityOnly = true;
+    allocation.utilityValue = utility.utilityValue;
+    allocation.utilityCappedCount = utility.utilityCappedCount;
+    allocation.preservedValueExceeded = false;
     dirty = true;
     renderStockTable();
-    $("stockStatus").textContent = `其他股票原持仓保持不变，已按预算重算自来水厂、电视公司、电力公司；当前股票市值约 ${stockValue}。`;
-    return {
-      count, newlyListed, stockValue, heldCount, ownershipRatio,
-      utilityOnly: true,
-      preservedValueExceeded: preservedStockValue > stockBudget
-    };
+    $("stockStatus").textContent = `已按优先级分配：公共事业约 ${allocation.utilityValue}，地图经营公司约 ${allocation.mapCompanyValue}，纯股市公司约 ${allocation.pureMarketValue}。`;
+    return allocation;
   }
   function allocateHumanStocksByBudget(stockBudget) {
     return $("onlyIncreaseUtilityStocks").checked
@@ -1316,7 +1483,7 @@
     const stockCapacityLimited = humanAssets + roundingTolerance < limits.allowedHumanAssets;
     let constraintText;
     if (allocation.preservedValueExceeded) {
-      constraintText = `已开启“只调整公用事业”，其他股票不会被卖出；原有非公用事业股票市值已经超过本次股票预算，因此实际指数可能高于目标。`;
+      constraintText = `原有非上市公用事业持仓已经超过本次股票预算，因此实际指数可能高于目标。`;
     } else if (limits.overflowCashToStocks) {
       constraintText = stockCapacityLimited
         ? `已启用超额现金转股票，但现有股票总流通盘不足以承接全部目标资产，仍缺少约 ${Math.round(limits.allowedHumanAssets - humanAssets)}。`
@@ -1326,7 +1493,9 @@
     } else {
       constraintText = `目标所需我方资产 ${plan.targetHumanAssets} 在限制范围内。`;
     }
-    const stockScopeText = allocation.utilityOnly ? "仅调整三家公用事业" : "动态分配全部股票";
+    const stockScopeText = allocation.utilityOnly
+      ? `三级优先分配（公用事业约 ${allocation.utilityValue || 0}，地图经营约 ${allocation.mapCompanyValue || 0}，纯股市约 ${allocation.pureMarketValue || 0}）`
+      : "公用事业保持不变，动态分配其他上市公司";
     $("priceIndexStatus").textContent = `${modeName}完成：${stockScopeText}；目标 ${plan.targetIndex.toFixed(2)}，当前估算 ${estimate.index.toFixed(2)}；我方现金 ${cash}/${limits.cashCap}，股票市值约 ${allocation.stockValue}，实际股票占比 ${(actualStockRatio * 100).toFixed(1)}%/${(limits.stockRatio * 100).toFixed(0)}%，持有 ${allocation.heldCount}/${allocation.count} 支股票。${constraintText} 未修改电脑资产、过路费和原有股价。`;
   }
   function applyPriceFriendlyMode() {
@@ -1342,13 +1511,20 @@
       $("stockStatus").textContent = "请先输入要设置的统一股价。留空表示不修改股价。";
       return;
     }
+    let changed = 0;
     for (let stock = 0; stock < count; stock++) {
+      if (isUtilityStock(stock)) {
+        keepUtilityUnlisted(stock);
+        continue;
+      }
       const offset = stockInfoOffset(stock);
       setF32(offset + 8, price);
       setF32(offset + 12, price);
+      changed++;
     }
+    enforceAllUtilitiesUnlisted();
     dirty = true;
-    $("stockStatus").textContent = `已把 ${count} 支股票今日价和昨日价设为 ${price}。`;
+    $("stockStatus").textContent = `已把 ${changed} 支上市股票的今日价和昨日价设为 ${price}；三家公用事业保持非上市且价格不改。`;
     renderStockTable();
   }
   function findStockByNameIndex(nameIndex) {
@@ -1362,55 +1538,36 @@
     return -1;
   }
   function listUtilityStocksForHuman(shareOverride = null) {
-    const human = humanSlot();
-    const desiredShares = shareOverride === null ? clamp($("stockShares").value, 0, 32767) : clamp(shareOverride, 0, 32767);
-    const manualPrice = Number($("stockPrice").value);
-    let changed = 0;
-    for (const nameIndex of UTILITY_NAME_INDEXES) {
-      const stock = findStockByNameIndex(nameIndex);
-      if (stock < 0) continue;
-      const info = stockInfoOffset(stock);
-      const existingPrice = f32(info + 8);
-      const price = Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : (existingPrice > 0 ? existingPrice : 20);
-      const currentTotal = stockFloatTotals[stock] || (u16(info + 18) + totalHeldShares(stock));
-      const total = Math.max(currentTotal, desiredShares, 5000);
-      setI16(info + 2, 0);
-      if (u16(info + 4) === 0) setU16(info + 4, 1);
-      setF32(info + 8, price);
-      setF32(info + 12, price);
-      stockFloatTotals[stock] = Math.min(total, 32767);
-      const humanOldShares = u16(stockHoldingOffset(stock, human));
-      const othersHeld = totalHeldShares(stock) - humanOldShares;
-      const shares = Math.min(desiredShares, Math.max(0, stockFloatTotals[stock] - othersHeld));
-      setPlayerStock(stock, human, shares, clamp(Math.round(price * shares), 0, 2147483647));
-      const heldAfter = totalHeldShares(stock);
-      const floatingAfter = Math.max(0, stockFloatTotals[stock] - heldAfter);
-      setU16(info + 18, floatingAfter);
-      setU16(info + 16, Math.max(1, Math.min(shares || 1, Math.max(1, floatingAfter))));
-      changed++;
-    }
-    if (changed > 0) {
-      const maxIndex = Math.max(...UTILITY_NAME_INDEXES.map(findStockByNameIndex).filter(i => i >= 0)) + 1;
-      if (maxIndex > selectedStockCount()) $("stockCount").value = String(Math.min(maxIndex, STOCK_MAX_SAFE));
-    }
+    const desiredShares = shareOverride === null
+      ? UTILITY_SHARE_CAP
+      : clamp(shareOverride, 0, UTILITY_SHARE_CAP);
+    const result = allocateUtilityHoldingsByBudget(Number.MAX_SAFE_INTEGER, desiredShares);
     dirty = true;
     renderStockTable();
-    $("stockStatus").textContent = `已处理 ${changed} 家公用事业：自来水厂、电视公司、电力公司。`;
+    $("stockStatus").textContent = `已按每家总股本 10000 设置三家公用事业持股；我方最多持有扣除其他玩家股份后的余额。三家公司仍为非上市，现量和流通量均为 0。`;
+    return result;
   }
   function setStockMarketBatch() {
     const count = selectedStockCount();
     const volume = clamp($("stockVolume").value, 0, 32767);
     const floating = clamp($("stockFloat").value, 0, 32767);
     const days = clamp($("stockDays").value, -1, 32767);
+    let changed = 0;
     for (let stock = 0; stock < count; stock++) {
+      if (isUtilityStock(stock)) {
+        keepUtilityUnlisted(stock);
+        continue;
+      }
       const offset = stockInfoOffset(stock);
       setI16(offset + 2, days);
       setU16(offset + 16, volume);
       setU16(offset + 18, floating);
       stockFloatTotals[stock] = floating + totalHeldShares(stock);
+      changed++;
     }
+    enforceAllUtilitiesUnlisted();
     dirty = true;
-    $("stockStatus").textContent = `已批量设置 ${count} 支股票的现量、流通量和上市天数，股价保持原值。`;
+    $("stockStatus").textContent = `已批量设置 ${changed} 支其他股票；三家公用事业保持非上市、现量 0、流通量 0。`;
     renderStockTable();
   }
   function selectedRentCount() {
@@ -1941,7 +2098,7 @@
   $("clearComputerStocks").addEventListener("click", () => { clearComputerStocks(); afterChange("已清空电脑股票。"); });
   $("raiseStockPrices").addEventListener("click", () => { setListedStockPrices(); afterChange("已设置上市股价。"); });
   $("applyStockMarketBatch").addEventListener("click", () => { setStockMarketBatch(); afterChange("已批量设置股票现量、流通量和上市天数，股价保持默认涨跌。"); });
-  $("listUtilityStocks").addEventListener("click", () => { listUtilityStocksForHuman(); afterChange("已让自来水厂、电视公司、电力公司上市并给我方持股。"); });
+  $("listUtilityStocks").addEventListener("click", () => { listUtilityStocksForHuman(); afterChange("已将三家非上市公用事业持股设至可持上限。"); });
   $("syncStockMarket").addEventListener("click", () => { syncStockMarketFromHoldings(); dirty = true; afterChange("已按持股同步股票现量和流通量。"); });
   $("applyStockTable").addEventListener("click", () => { applyStockTableToBytes(); afterChange("已应用股票表格修改。"); });
   $("stockCount").addEventListener("change", () => renderStockTable());
