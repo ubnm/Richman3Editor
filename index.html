@@ -60,6 +60,16 @@
     }
     label, .field { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
     .fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+    .check-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      margin-top: 17px;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .check-field input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
     .status { margin-top: 12px; min-height: 22px; color: var(--muted); }
     .status strong { color: var(--ink); }
     .status .ok { color: var(--primary); }
@@ -185,18 +195,20 @@
 
   <section class="panel section-gap">
     <h2>物价指数控制</h2>
-    <p class="small">物价指数按所有玩家平均资产计算，不是一个单独存档数值。物价友好模式只调整我方现金和股票，不清零过路费、不补贴电脑。</p>
+    <p class="small">目标指数决定期望资产，现金上限和股票占比是硬限制。股票占比 = 股票市值 ÷（现金 + 股票市值）；若目标过高，将按上限截断，不会把超额资产转移到股票。占比设为 100% 等于不限制股票总额，物价友好建议保持在 80% 以下。</p>
     <div class="fields">
-      <label><span>目标指数</span><input id="targetPriceIndex" type="number" min="0.1" max="99" step="0.1" value="1.5"></label>
+      <label><span>目标指数</span><input id="targetPriceIndex" type="number" min="0.1" max="999" step="0.1" value="1.5"></label>
       <label><span>我方现金上限</span><input id="friendlyCashCap" type="number" min="0" max="2147483647" value="220000"></label>
-      <label><span>我方每股持仓上限</span><input id="friendlyStockCap" type="number" min="0" max="32767" value="1000"></label>
+      <label><span>股票资产占比上限（%）</span><input id="friendlyStockRatio" type="number" min="1" max="100" step="1" value="60"></label>
       <label><span>模式说明</span><input type="text" value="只改我方，不改电脑和过路费" disabled></label>
+      <label class="check-field"><input id="overflowCashToStocks" type="checkbox" checked><span>超额现金强制转股票（允许突破占比）</span></label>
     </div>
     <div class="toolbar section-gap">
       <button id="estimatePriceIndex" disabled>估算物价指数</button>
       <button id="capHumanLiquidAssets" disabled>限制我方现金/存款</button>
-      <button id="capHumanStockAssets" disabled>限制我方股票持仓</button>
+      <button id="capHumanStockAssets" disabled>按目标预算重算股票</button>
       <button id="priceFriendlyMode" class="primary" disabled>物价友好模式</button>
+      <button id="targetPriceIndexMode" class="primary" disabled>目标物价指数模式</button>
     </div>
     <div id="priceIndexStatus" class="status">载入存档后可估算。真实指数还可能包含土地等资产，游戏内显示为准。</div>
   </section>
@@ -503,7 +515,7 @@
       "saveDirect", "saveNative", "download", "applyMoney", "applyCards", "applyItems", "applyStatusCredit", "clearComputers",
       "applyStocks", "buyAllFloatStocks", "clearComputerStocks", "raiseStockPrices", "applyStockMarketBatch", "listUtilityStocks", "syncStockMarket", "applyStockTable",
       "applyRentBatch", "zeroRentBatch", "applyRentTable",
-      "estimatePriceIndex", "capHumanLiquidAssets", "capHumanStockAssets", "priceFriendlyMode",
+      "estimatePriceIndex", "capHumanLiquidAssets", "capHumanStockAssets", "priceFriendlyMode", "targetPriceIndexMode",
       "applyDate", "applyPosition", "applyTaskStatus", "clearHumanStatus", "applyCredit", "clearRoadEvents", "bankruptComputers",
       "fillCardsFromCatalog", "fillCardPoolFromCatalog", "clearHumanCards", "fillItemsFromCatalog", "clearHumanItems", "clearComputerInventoryFromCatalog"
     ].forEach(id => { $(id).disabled = !enabled; });
@@ -806,9 +818,7 @@
       const offset = stockInfoOffset(i);
       const nameIndex = u16(offset);
       const price = f32(offset + 8);
-      const currentVolume = u16(offset + 16);
-      const floatingVolume = u16(offset + 18);
-      const ok = nameIndex > 0 && nameIndex < 2000 && Number.isFinite(price) && price >= 0 && price < 10000 && (price > 0 || currentVolume > 0 || floatingVolume > 0);
+      const ok = nameIndex > 0 && nameIndex < 2000 && Number.isFinite(price) && price >= 0 && price < 10000;
       if (!ok) break;
       count++;
     }
@@ -819,6 +829,15 @@
   }
 
   function selectedStockCount() { return clamp($("stockCount").value, 1, STOCK_MAX_SAFE); }
+  function namedStockCount() {
+    let count = 0;
+    for (let stock = 0; stock < STOCK_MAX_SAFE; stock++) {
+      const nameIndex = u16(stockInfoOffset(stock));
+      if (nameIndex <= 0 || nameIndex >= 2000) break;
+      count++;
+    }
+    return count;
+  }
   function totalHeldShares(stock) {
     let held = 0;
     for (let p = 0; p < PLAYER_COUNT; p++) held += u16(stockHoldingOffset(stock, p));
@@ -885,6 +904,37 @@
     setU16(offset, shares);
     setI32(offset + 2, cost);
   }
+  function ensureAllStocksListed() {
+    const count = Math.max(selectedStockCount(), namedStockCount());
+    $("stockCount").value = String(count);
+    const knownTotals = stockFloatTotals.slice(0, count).filter(total => Number.isFinite(total) && total > 0).sort((a, b) => a - b);
+    const medianTotal = knownTotals.length ? knownTotals[Math.floor(knownTotals.length / 2)] : 10000;
+    const knownPrices = [];
+    for (let stock = 0; stock < count; stock++) {
+      const price = f32(stockInfoOffset(stock) + 8);
+      if (Number.isFinite(price) && price > 0) knownPrices.push(price);
+    }
+    knownPrices.sort((a, b) => a - b);
+    const medianPrice = knownPrices.length ? knownPrices[Math.floor(knownPrices.length / 2)] : 20;
+    let newlyListed = 0;
+    for (let stock = 0; stock < count; stock++) {
+      const info = stockInfoOffset(stock);
+      const wasUnlisted = i16(info + 2) < 0 || !(stockFloatTotals[stock] > 0);
+      const price = f32(info + 8) > 0 ? f32(info + 8) : medianPrice;
+      const total = Math.min(32767, Math.max(stockFloatTotals[stock] || 0, totalHeldShares(stock), medianTotal, 5000));
+      stockFloatTotals[stock] = total;
+      setI16(info + 2, 0);
+      if (u16(info + 4) === 0) setU16(info + 4, 1);
+      setF32(info + 8, price);
+      if (!(f32(info + 12) > 0)) setF32(info + 12, price);
+      const floating = Math.max(0, total - totalHeldShares(stock));
+      setU16(info + 18, floating);
+      const existingVolume = u16(info + 16);
+      setU16(info + 16, floating > 0 ? Math.min(floating, existingVolume || Math.max(1, Math.round(total * 0.1))) : 0);
+      if (wasUnlisted) newlyListed++;
+    }
+    return { count, newlyListed, medianTotal };
+  }
   function maxHumanStocks() {
     const human = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1);
     const count = selectedStockCount();
@@ -909,7 +959,8 @@
   }
   function buyAllFloatingStocksForHuman() {
     const human = humanSlot();
-    const count = selectedStockCount();
+    const listed = ensureAllStocksListed();
+    const count = listed.count;
     for (let stock = 0; stock < count; stock++) {
       const info = stockInfoOffset(stock);
       const price = Math.max(0.01, f32(info + 8));
@@ -923,7 +974,7 @@
     }
     dirty = true;
     renderStockTable();
-    $("stockStatus").textContent = `已让玩家 ${human + 1} 买光 ${count} 支股票的可流通股，现量/流通量已归零。`;
+    $("stockStatus").textContent = `已让玩家 ${human + 1} 买光全部 ${count} 支股票的可流通股（新上市 ${listed.newlyListed} 支），包含来来饭店、凯悦饭店、中华航空；现量/流通量已归零。`;
   }
   function clearComputerStocks() {
     const start = clamp($("computerStart").value, 0, PLAYER_COUNT - 1);
@@ -979,42 +1030,132 @@
     renderPlayers();
     showEstimatedPriceIndex();
   }
-  function capHumanStockAssets() {
-    const slot = humanSlot();
-    const cap = clamp($("friendlyStockCap").value, 0, 32767);
-    const count = selectedStockCount();
-    for (let stock = 0; stock < count; stock++) {
-      const hold = stockHoldingOffset(stock, slot);
-      const current = u16(hold);
-      if (current > cap) {
-        const price = Math.max(0.01, f32(stockInfoOffset(stock) + 8));
-        setPlayerStock(stock, slot, cap, Math.round(price * cap));
+  function targetPricePlan() {
+    const human = humanSlot();
+    let activePlayers = 0;
+    let othersAssets = 0;
+    for (let slot = 0; slot < PLAYER_COUNT; slot++) {
+      if (!u16(playerBase(slot) + playerOffsets.control)) continue;
+      activePlayers++;
+      if (slot !== human) othersAssets += playerLiquidAssets(slot) + playerStockMarketValue(slot);
+    }
+    activePlayers = Math.max(1, activePlayers);
+    const targetIndex = Math.max(0.1, Number($("targetPriceIndex").value) || 1.5);
+    const targetTotalAssets = Math.round(targetIndex * 200000 * activePlayers);
+    const targetHumanAssets = Math.max(0, targetTotalAssets - othersAssets);
+    return { human, activePlayers, othersAssets, targetIndex, targetTotalAssets, targetHumanAssets };
+  }
+  function friendlyAssetLimits(plan) {
+    const stockRatio = clamp($("friendlyStockRatio").value, 1, 100) / 100;
+    const cashCap = clamp($("friendlyCashCap").value, 0, 2147483647);
+    const overflowCashToStocks = $("overflowCashToStocks").checked;
+    const hardHumanAssetCap = stockRatio >= 1
+      ? plan.targetHumanAssets
+      : Math.floor(cashCap / (1 - stockRatio));
+    const allowedHumanAssets = overflowCashToStocks
+      ? plan.targetHumanAssets
+      : Math.min(plan.targetHumanAssets, hardHumanAssetCap);
+    const ratioStockBudget = Math.floor(allowedHumanAssets * stockRatio);
+    const cashOverflowStockBudget = Math.max(0, allowedHumanAssets - cashCap);
+    const stockBudget = overflowCashToStocks
+      ? Math.max(ratioStockBudget, cashOverflowStockBudget)
+      : ratioStockBudget;
+    return {
+      stockRatio, cashCap, overflowCashToStocks, hardHumanAssetCap,
+      allowedHumanAssets, stockBudget,
+      overflowTransferred: Math.max(0, stockBudget - ratioStockBudget)
+    };
+  }
+  function allocateHumanStocksByBudget(stockBudget) {
+    const listed = ensureAllStocksListed();
+    const human = humanSlot();
+    const candidates = [];
+    for (let stock = 0; stock < listed.count; stock++) {
+      const info = stockInfoOffset(stock);
+      const price = Math.max(0.01, f32(info + 8));
+      const humanOldShares = u16(stockHoldingOffset(stock, human));
+      const othersHeld = Math.max(0, totalHeldShares(stock) - humanOldShares);
+      const total = stockFloatTotals[stock] || (u16(info + 18) + totalHeldShares(stock));
+      candidates.push({ stock, info, price, total, maxShares: Math.max(0, total - othersHeld), shares: 0 });
+    }
+
+    const minimumAllStockCost = candidates.reduce((sum, item) => sum + (item.maxShares > 0 ? item.price : 0), 0);
+    const canHoldEveryStock = stockBudget >= minimumAllStockCost;
+    let remainingBudget = stockBudget;
+    for (const item of candidates) {
+      item.shares = canHoldEveryStock && item.maxShares > 0 ? 1 : 0;
+      remainingBudget -= item.shares * item.price;
+    }
+    remainingBudget = Math.max(0, remainingBudget);
+
+    const maxExtraValue = candidates.reduce((sum, item) => sum + (item.maxShares - item.shares) * item.price, 0);
+    const ownershipRatio = maxExtraValue > 0 ? Math.min(1, remainingBudget / maxExtraValue) : 0;
+    for (const item of candidates) {
+      const extra = Math.floor((item.maxShares - item.shares) * ownershipRatio);
+      item.shares += extra;
+      remainingBudget -= extra * item.price;
+    }
+
+    for (const item of [...candidates].sort((a, b) => a.price - b.price)) {
+      if (item.shares < item.maxShares && item.price <= remainingBudget) {
+        item.shares++;
+        remainingBudget -= item.price;
       }
     }
-    syncStockMarketFromHoldings();
+
+    for (const item of candidates) {
+      setPlayerStock(item.stock, human, item.shares, clamp(Math.round(item.price * item.shares), 0, 2147483647));
+      const floating = Math.max(0, item.total - totalHeldShares(item.stock));
+      setU16(item.info + 18, floating);
+      const currentVolume = u16(item.info + 16);
+      setU16(item.info + 16, floating > 0 ? Math.min(floating, currentVolume || Math.max(1, Math.round(item.total * 0.1))) : 0);
+    }
+    const stockValue = playerStockMarketValue(human);
+    const heldCount = candidates.filter(item => item.shares > 0).length;
     dirty = true;
+    renderStockTable();
+    $("stockStatus").textContent = `已按资产预算动态分配全部 ${listed.count} 支股票：我方持有 ${heldCount} 支，新上市 ${listed.newlyListed} 支，股票市值约 ${stockValue}。`;
+    return { ...listed, stockValue, heldCount, ownershipRatio };
+  }
+  function capHumanStockAssets() {
+    const plan = targetPricePlan();
+    const limits = friendlyAssetLimits(plan);
+    allocateHumanStocksByBudget(limits.stockBudget);
     showEstimatedPriceIndex();
   }
-  function applyPriceFriendlyMode() {
-    capHumanStockAssets();
-    listUtilityStocksForHuman(clamp($("friendlyStockCap").value, 0, 32767));
-    const estimate = estimatePriceIndexValue();
-    const human = humanSlot();
-    const humanAssetsNow = playerLiquidAssets(human) + playerStockMarketValue(human);
-    const othersAssets = estimate.totalAssets - humanAssetsNow;
-    const targetIndex = Number($("targetPriceIndex").value) || 1.5;
-    const targetTotalAssets = targetIndex * 200000 * Math.max(1, estimate.activePlayers);
-    const humanStockValue = playerStockMarketValue(human);
-    const maxCash = clamp($("friendlyCashCap").value, 0, 2147483647);
-    const desiredHumanCash = Math.max(0, Math.round(targetTotalAssets - othersAssets - humanStockValue));
-    const cash = Math.min(maxCash, desiredHumanCash);
-    setPlayerNumbers(human, { cash, bank: 0 });
+  function applyConstrainedPriceMode(modeName) {
+    const plan = targetPricePlan();
+    const limits = friendlyAssetLimits(plan);
+    const allocation = allocateHumanStocksByBudget(limits.stockBudget);
+    const desiredHumanCash = Math.max(0, Math.round(limits.allowedHumanAssets - allocation.stockValue));
+    const cash = Math.min(limits.cashCap, desiredHumanCash);
+    setPlayerNumbers(plan.human, { cash, bank: 0 });
     $("cash").value = String(cash);
     $("bank").value = "0";
     dirty = true;
     renderPlayers();
-    showEstimatedPriceIndex();
-    $("priceIndexStatus").textContent += " 已应用物价友好模式：按目标指数调整我方现金，限制我方股票，并让自来水厂、电视公司、电力公司上市持股；未修改过路费和电脑资产。";
+    const estimate = estimatePriceIndexValue();
+    const humanAssets = cash + allocation.stockValue;
+    const actualStockRatio = humanAssets > 0 ? allocation.stockValue / humanAssets : 0;
+    const roundingTolerance = Math.max(10, Math.round(limits.allowedHumanAssets * 0.001));
+    const stockCapacityLimited = humanAssets + roundingTolerance < limits.allowedHumanAssets;
+    let constraintText;
+    if (limits.overflowCashToStocks) {
+      constraintText = stockCapacityLimited
+        ? `已启用超额现金转股票，但现有股票总流通盘不足以承接全部目标资产，仍缺少约 ${Math.round(limits.allowedHumanAssets - humanAssets)}。`
+        : `已启用超额现金转股票，约 ${Math.round(limits.overflowTransferred)} 的现金额度已转入股票，允许实际股票占比突破设置值。`;
+    } else if (limits.allowedHumanAssets < plan.targetHumanAssets) {
+      constraintText = `目标需要我方资产 ${plan.targetHumanAssets}，但现金与股票占比上限只允许约 ${limits.allowedHumanAssets}，已按硬限制截断。`;
+    } else {
+      constraintText = `目标所需我方资产 ${plan.targetHumanAssets} 在限制范围内。`;
+    }
+    $("priceIndexStatus").textContent = `${modeName}完成：目标 ${plan.targetIndex.toFixed(2)}，当前估算 ${estimate.index.toFixed(2)}；我方现金 ${cash}/${limits.cashCap}，股票市值约 ${allocation.stockValue}，实际股票占比 ${(actualStockRatio * 100).toFixed(1)}%/${(limits.stockRatio * 100).toFixed(0)}%，持有 ${allocation.heldCount}/${allocation.count} 支股票。${constraintText} 未修改电脑资产、过路费和原有股价。`;
+  }
+  function applyPriceFriendlyMode() {
+    applyConstrainedPriceMode("物价友好模式");
+  }
+  function applyTargetPriceIndexMode() {
+    applyConstrainedPriceMode("目标物价指数模式");
   }
   function setListedStockPrices() {
     const count = selectedStockCount();
@@ -1231,7 +1372,7 @@
     for (const encoding of decoders) {
       try {
         const text = cleanWordText(new TextDecoder(encoding).decode(bytesPart));
-        if (text && !text.includes("�")) return text;
+        if (text && !text.includes(" ")) return text;
       } catch (_) {}
     }
     return "";
@@ -1338,7 +1479,7 @@
     return [
       "humanSlot", "cash", "bank", "coupon", "itemCount", "poolCount", "computerStart", "computerCount",
       "stockCount", "stockShares", "stockPrice", "stockVolume", "stockFloat", "stockDays",
-      "targetPriceIndex", "friendlyCashCap", "friendlyStockCap",
+      "targetPriceIndex", "friendlyCashCap", "friendlyStockRatio", "overflowCashToStocks",
       "rentCount", "rent0", "rent1", "rent5",
       "turnPlayer", "year", "month", "day", "posX", "posY", "vehicle", "creditLimit",
       "jailDays", "hospitalDays", "sleepDays", "sleepwalkDays", "godType", "godTurns", "statusPreset"
@@ -1346,7 +1487,10 @@
   }
   function saveCurrentSettings() {
     const settings = {};
-    for (const id of configurableIds()) settings[id] = $(id).value;
+    for (const id of configurableIds()) {
+      const input = $(id);
+      settings[id] = input.type === "checkbox" ? input.checked : input.value;
+    }
     localStorage.setItem(settingsKey, JSON.stringify(settings));
     $("settingsStatus").value = "配置已保存";
     setStatus(`<span class="ok">已保存当前页面配置。</span> 下次打开可点击“读取配置”恢复。`);
@@ -1359,7 +1503,10 @@
     }
     const settings = JSON.parse(raw);
     for (const id of configurableIds()) {
-      if ($(id) && settings[id] !== undefined) $(id).value = settings[id];
+      const input = $(id);
+      if (!input || settings[id] === undefined) continue;
+      if (input.type === "checkbox") input.checked = Boolean(settings[id]);
+      else input.value = settings[id];
     }
     $("settingsStatus").value = "已读取配置";
     if (!silent) setStatus(`<span class="ok">已读取保存的配置。</span>`);
@@ -1465,8 +1612,9 @@
   $("stockCount").addEventListener("change", () => renderStockTable());
   $("estimatePriceIndex").addEventListener("click", showEstimatedPriceIndex);
   $("capHumanLiquidAssets").addEventListener("click", () => { capHumanLiquidAssets(); afterChange("已限制我方现金和存款，用于降低物价指数。"); });
-  $("capHumanStockAssets").addEventListener("click", () => { capHumanStockAssets(); afterChange("已限制我方股票持仓，用于降低物价指数。"); });
+  $("capHumanStockAssets").addEventListener("click", () => { capHumanStockAssets(); afterChange("已按目标指数预算动态重算我方全部股票持仓。"); });
   $("priceFriendlyMode").addEventListener("click", () => { applyPriceFriendlyMode(); afterChange("已应用物价友好模式。"); });
+  $("targetPriceIndexMode").addEventListener("click", () => { applyTargetPriceIndexMode(); afterChange("已按目标物价指数反算我方资产。"); });
   $("applyRentBatch").addEventListener("click", () => { setRentBatch(false); afterChange("已批量设置土地过路费。"); });
   $("zeroRentBatch").addEventListener("click", () => { setRentBatch(true); afterChange("已清零土地过路费。"); });
   $("applyRentTable").addEventListener("click", () => { applyRentTableToBytes(); afterChange("已应用土地过路费表格。"); });
