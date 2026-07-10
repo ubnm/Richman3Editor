@@ -29,6 +29,8 @@
     header { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 16px; }
     h1 { margin: 0; font-size: 28px; line-height: 1.15; letter-spacing: 0; }
     h2 { margin: 0 0 12px; font-size: 17px; letter-spacing: 0; }
+    h3 { margin: 16px 0 8px; font-size: 14px; letter-spacing: 0; }
+    .subsection-title { border-top: 1px solid var(--line); padding-top: 16px; }
     p { margin: 0; color: var(--muted); }
     .grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 16px; }
     .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
@@ -109,6 +111,20 @@
       background: #fff;
     }
     .card-line code { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    .card-choice-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+    .card-choice {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 8px;
+      color: var(--ink);
+      font-size: 13px;
+      background: #fff;
+    }
+    .card-choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
     .small { font-size: 12px; color: var(--muted); }
     .section-gap { margin-top: 16px; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
@@ -131,7 +147,7 @@
       cursor: pointer;
     }
     @media (max-width: 880px) {
-      .grid, .fields, .cards { grid-template-columns: 1fr; }
+      .grid, .fields, .cards, .card-choice-grid { grid-template-columns: 1fr; }
       header { align-items: start; flex-direction: column; }
     }
   </style>
@@ -195,13 +211,14 @@
 
   <section class="panel section-gap">
     <h2>物价指数控制</h2>
-    <p class="small">目标指数决定期望资产，现金上限和股票占比是硬限制。股票占比 = 股票市值 ÷（现金 + 股票市值）；若目标过高，将按上限截断，不会把超额资产转移到股票。占比设为 100% 等于不限制股票总额，物价友好建议保持在 80% 以下。</p>
+    <p class="small">目标指数决定期望资产，计算时先把我方现金补到现金上限，剩余目标资产再转为三家公用事业股票，因此实际股票占比可以超过设置值；关闭“超额现金强制转股票”后，股票占比才作为硬上限并截断目标资产。</p>
     <div class="fields">
       <label><span>目标指数</span><input id="targetPriceIndex" type="number" min="0.1" max="999" step="0.1" value="1.5"></label>
       <label><span>我方现金上限</span><input id="friendlyCashCap" type="number" min="0" max="2147483647" value="220000"></label>
       <label><span>股票资产占比上限（%）</span><input id="friendlyStockRatio" type="number" min="1" max="100" step="1" value="60"></label>
       <label><span>模式说明</span><input type="text" value="只改我方，不改电脑和过路费" disabled></label>
       <label class="check-field"><input id="overflowCashToStocks" type="checkbox" checked><span>超额现金强制转股票（允许突破占比）</span></label>
+      <label class="check-field"><input id="onlyIncreaseUtilityStocks" type="checkbox" checked><span>只调整三家公用事业，其他股票保持不变</span></label>
     </div>
     <div class="toolbar section-gap">
       <button id="estimatePriceIndex" disabled>估算物价指数</button>
@@ -268,37 +285,48 @@
   </section>
 
   <section class="panel section-gap">
-    <h2>土地管理</h2>
-    <p class="small">土地归属修改已禁用：只改存档里的所有者会造成“实际归属变了，但地图颜色仍像空地”的问题。为了不做出你不喜欢的半成品效果，这里只保留查看，不建议保存这些字段。</p>
+    <h2>土地 / 地产 / 过路费管理</h2>
+    <h3>土地归属与地产等级</h3>
+    <p class="small">修改归属时会同时更新土地记录和地图颜色。支持台北、台湾、中国大陆三张地图；特殊设施不会参与批量归属，避免破坏其专用图块。</p>
     <div class="fields">
-      <label><span>土地/公司记录数量</span><input id="landCount" type="number" min="1" max="121" value="121"></label>
+      <label><span>已识别地图</span><input id="landMapName" value="载入后识别" readonly></label>
+      <label><span>土地记录数量</span><input id="landCount" type="number" min="1" max="110" value="83" readonly></label>
       <label><span>目标所有者</span><select id="landOwnerTarget"></select></label>
       <label><span>地价批量设为</span><input id="landPrice" type="number" min="0" max="2147483647" value="999999"></label>
-      <label><span>房价批量设为</span><input id="landHousePrice" type="number" min="0" max="2147483647" value="1"></label>
+      <label><span>基础房价批量设为</span><input id="landHousePrice" type="number" min="0" max="65535" value="9999"></label>
     </div>
     <div class="toolbar section-gap">
-      <button id="ownAllLand" class="warn" disabled>已禁用：全部归我</button>
-      <button id="clearComputerLand" class="warn" disabled>已禁用：清空电脑土地</button>
-      <button id="setAllLandOwner" disabled>已禁用：批量设置所有者</button>
-      <button id="setLandPriceBatch" disabled>已禁用：批量设置地价/房价</button>
-      <button id="applyLandTable" disabled>已禁用：应用土地表格</button>
+      <button id="ownAllLand" class="warn" disabled>全部土地归我</button>
+      <button id="repairLandColors" disabled>修复现有土地颜色</button>
+      <button id="clearComputerLand" class="warn" disabled>清空电脑土地</button>
+      <button id="setAllLandOwner" disabled>批量设置所有者</button>
+      <button id="setLandPriceBatch" disabled>批量设置地价/基础房价</button>
+      <button id="applyLandTable" disabled>应用土地表格</button>
     </div>
-    <div id="landStatus" class="status">当前只读显示土地/公司记录。归属修改会造成地图颜色不同步，已关闭。</div>
+    <div class="fields">
+      <label><span>地产操作玩家</span><select id="estatePlayerTarget"></select></label>
+      <label><span>地产操作范围</span><input type="text" value="只处理该玩家拥有的普通地产" readonly></label>
+    </div>
+    <div class="toolbar section-gap">
+      <button id="upgradePlayerLandOne" disabled>该玩家地产全部升 1 级</button>
+      <button id="downgradePlayerLandOne" disabled>该玩家地产全部降 1 级</button>
+      <button id="maxPlayerLand" class="primary" disabled>该玩家地产直接升满</button>
+      <button id="clearPlayerLand" class="warn" disabled>清空该玩家土地和地产</button>
+    </div>
+    <div id="landStatus" class="status">载入存档后会自动识别地图并启用颜色同步。</div>
     <details class="section-gap">
       <summary>展开土地拥有明细表</summary>
       <div class="table-wrap">
         <table class="stock-table">
           <thead>
-            <tr><th>#</th><th>地价</th><th>房价</th><th>未知</th><th>所有者</th></tr>
+            <tr><th>#</th><th>类别</th><th>地价</th><th>基础房价</th><th>等级</th><th>建筑类型</th><th>所有者</th></tr>
           </thead>
           <tbody id="landRows"></tbody>
         </table>
       </div>
     </details>
-  </section>
 
-  <section class="panel section-gap">
-    <h2>过路费管理</h2>
+    <h3 class="subsection-title">过路费管理</h3>
     <p class="small">过路费表是公开资料明确写在存档里的区域。每条记录 6 个金额：空地、1-5 级房屋。</p>
     <div class="fields">
       <label><span>土地记录数量</span><input id="rentCount" type="number" min="1" max="120" value="119"></label>
@@ -367,14 +395,19 @@
     <h2>卡片与道具编号</h2>
     <div class="toolbar section-gap">
       <button id="fillCardsFromCatalog" disabled>我方补满卡片</button>
+      <button id="applyCardCycle" class="primary" disabled>按所选卡片循环填满 15 张</button>
+      <button id="selectAllCardCycle">全选卡片</button>
+      <button id="clearCardCycleSelection">清空选择</button>
       <button id="fillCardPoolFromCatalog" disabled>补满卡片池</button>
       <button id="clearHumanCards" class="warn" disabled>清空我方卡片</button>
       <button id="fillItemsFromCatalog" disabled>我方补满道具</button>
       <button id="clearHumanItems" class="warn" disabled>清空我方道具</button>
       <button id="clearComputerInventoryFromCatalog" class="warn" disabled>清空电脑卡片道具</button>
     </div>
+    <div id="cardCycleChoices" class="card-choice-grid"></div>
+    <div id="cardCycleStatus" class="status">勾选想要的卡片后，会按照当前列表顺序循环填满 15 个卡片槽。</div>
     <div class="cards" id="catalog"></div>
-    <p class="small section-gap">说明：道具栏实际只有 8 类道具；汽车会单独装备，不占道具栏。卡片栏最多 15 张，存档只能在读档前补满，进游戏使用后仍会按游戏规则消耗；要再次补满就重新打开存档套用一次。</p>
+    <p class="small section-gap">说明：道具栏实际只有 8 类道具；汽车会单独装备，不占道具栏。卡片栏最多 15 张，自选循环会按勾选顺序反复写入直到填满；进游戏使用后仍会按游戏规则消耗，要再次补满就重新打开存档套用一次。</p>
   </section>
 </main>
 
@@ -410,7 +443,26 @@
   const RENT_MAX_SAFE = 120;
   const LAND_TABLE = 0x1600;
   const LAND_RECORD_STRIDE = 12;
-  const LAND_MAX_SAFE = 121;
+  const LAND_MAP_LAYER = 0x0278;
+  const LAND_MAX_SAFE = 110;
+
+  const LAND_MAP_PROFILES = [
+    {
+      name: "台北", count: 83,
+      houseBase: [180,180,180,180,180,180,400,400,400,150,150,150,160,160,160,200,200,200,200,200,200,200,200,3600,3600,360,3600,340,340,340,340,80,80,80,100,100,100,100,100,100,100,100,100,100,160,160,160,160,200,200,200,180,180,180,200,200,200,180,180,180,340,340,340,300,300,300,300,300,300,300,200,200,200,200,200,200,200,200,200,200,200,200,200],
+      visualCells: [2066,2067,2068,2069,2070,2071,1723,1724,1725,865,866,867,870,871,872,1817,1818,1819,1820,1667,1668,1669,1670,1873,1923,1973,2023,1864,1914,1964,2014,1205,1206,1207,1253,1303,1353,1258,1308,1358,1404,1405,1406,1407,1510,1560,1610,1660,915,965,1015,1265,1315,1365,1272,1322,1372,922,972,1022,1578,1628,1678,1279,1329,1379,1429,1231,1232,1233,1285,1335,1385,1435,1482,1483,1484,1516,1566,1616,1521,1571,1621]
+    },
+    {
+      name: "台湾", count: 83,
+      houseBase: [400,400,400,400,3000,2500,2000,400,400,400,400,400,400,400,300,300,300,160,160,160,160,160,160,200,200,200,160,160,160,150,150,150,150,150,150,100,100,100,100,100,100,100,100,100,160,160,160,160,160,160,160,160,400,400,400,400,400,400,360,360,360,360,360,360,250,250,250,250,250,180,180,180,150,150,150,150,400,400,400,400,150,150,150],
+      visualCells: [324,374,424,474,-1,-1,-1,327,377,427,477,227,228,229,480,530,580,728,778,828,731,781,831,979,1029,1079,1229,1279,1329,1472,1522,1572,1475,1525,1575,1724,1774,1824,1874,1924,1767,1817,1867,1917,823,824,825,826,973,974,975,976,1715,1716,1717,1565,1566,1567,1415,1465,1515,1412,1462,1512,1365,1366,1367,1368,1369,1015,1065,1115,1022,1072,1122,972,967,968,969,970,621,671,721]
+    },
+    {
+      name: "中国大陆", count: 110,
+      houseBase: [160,160,160,160,160,400,400,400,400,400,400,360,360,360,360,360,360,360,360,360,360,360,360,400,400,400,400,400,400,300,300,300,300,200,200,200,200,200,250,250,250,250,150,150,150,150,150,100,100,100,80,80,80,100,100,100,100,100,100,100,100,100,150,150,150,160,160,160,160,150,150,150,250,250,250,200,200,200,300,300,300,300,300,180,180,180,250,250,250,200,200,200,3000,1500,1750,2500,2000,340,340,340,340,340,340,200,200,200,200,200,200,200],
+      visualCells: [1269,1270,1271,1272,1273,123,124,125,273,274,275,276,326,376,279,329,379,980,1030,1080,983,1033,1083,1183,1184,1185,1333,1334,1335,1586,1636,1686,1736,1881,1931,1981,2031,2081,2125,2126,2127,2128,1905,1906,1907,1908,1909,1850,1900,1950,1650,1700,1750,1399,1449,1499,1156,1206,1256,960,1010,1060,1210,1260,1310,1709,1759,1809,1859,866,867,868,218,219,220,468,518,568,1619,1620,1621,1622,1623,1467,1517,1567,878,879,880,777,827,877,-1,-1,-1,-1,-1,216,266,316,1275,1325,1375,1475,1525,1575,1625,1267,1317,1367]
+    }
+  ];
 
   const playerOffsets = {
     id: 0x12, control: 0x14, x: 0x16, y: 0x18, direction: 0x1A, vehicle: 0x1C,
@@ -431,11 +483,12 @@
   const fullHand = [0x01,0x01,0x02,0x02,0x03,0x03,0x06,0x06,0x0F,0x0F,0x10,0x15,0x15,0x16,0x1A];
   const itemNames = ["信用卡", "定时炸弹", "飞弹", "地雷", "路障", "遥控骰子", "机器娃娃", "机票"];
   const stockNameByIndex = {
-    131: "电力公司", 132: "电视公司", 133: "力霸房屋", 134: "自来水厂", 136: "太平洋",
-    137: "中华航空", 138: "新光三越", 139: "来来饭店", 140: "凯悦饭店",
-    433: "中兴纺织", 434: "海信电器", 435: "新飞电器", 436: "华西集团",
-    437: "双环化工", 439: "柳州钢铁", 459: "太原重机"
+    131: "来来饭店", 132: "新光三越", 133: "力霸房屋", 134: "中兴纺织", 135: "太平洋百货",
+    136: "中华航空", 137: "电视公司", 138: "凯悦饭店", 139: "电力公司", 140: "自来水厂",
+    433: "台北商银", 434: "太平洋", 435: "大宇资讯", 436: "大宇科技",
+    437: "顺成钢铁", 438: "大宇航空", 439: "宏宇服饰", 459: "大宇银行"
   };
+  const UTILITY_NAME_INDEXES = [140, 139, 137];
   const godTypes = [
     [0x00, "00h - 无"],
     [0x08, "08h - 财神"],
@@ -460,6 +513,7 @@
   let downloadUrl = null;
   let wordDatNames = {};
   let stockFloatTotals = [];
+  let activeLandMap = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -467,6 +521,7 @@
     $("humanSlot").innerHTML = "";
     $("computerStart").innerHTML = "";
     $("landOwnerTarget").innerHTML = "";
+    $("estatePlayerTarget").innerHTML = "";
     $("godType").innerHTML = "";
     $("landOwnerTarget").add(new Option("无人", "0"));
     for (const [value, label] of godTypes) $("godType").add(new Option(label, String(value)));
@@ -474,10 +529,12 @@
       $("humanSlot").add(new Option(`第 ${i + 1} 位`, String(i)));
       $("computerStart").add(new Option(`第 ${i + 1} 位`, String(i)));
       $("landOwnerTarget").add(new Option(`第 ${i + 1} 位玩家`, String(i + 1)));
+      $("estatePlayerTarget").add(new Option(`玩家 ${i + 1}`, String(i + 1)));
     }
     $("humanSlot").value = "0";
     $("computerStart").value = "1";
     $("landOwnerTarget").value = "1";
+    $("estatePlayerTarget").value = "1";
     $("godType").value = "0";
   }
 
@@ -486,6 +543,16 @@
       ...cards.map(([id, name]) => `<div class="card-line"><span>${name}</span><code>${hex(id)}</code></div>`),
       ...itemNames.map((name, idx) => `<div class="card-line"><span>${name}</span><code>道具${idx + 1}</code></div>`)
     ].join("");
+  }
+
+  function renderCardCycleChoices() {
+    const defaultIds = new Set(fullHand);
+    $("cardCycleChoices").innerHTML = cards.map(([id, name]) => `
+      <label class="card-choice">
+        <input type="checkbox" data-card-cycle-id="${id}" ${defaultIds.has(id) ? "checked" : ""}>
+        <span>${name} ${hex(id)}</span>
+      </label>
+    `).join("");
   }
 
   function godLabel(value) {
@@ -502,6 +569,8 @@
   function i32(offset) { return view.getInt32(offset, true); }
   function f32(offset) { return view.getFloat32(offset, true); }
   function setU16(offset, value) { view.setUint16(offset, clamp(value, 0, 65535), true); }
+  function u32(offset) { return view.getUint32(offset, true); }
+  function setU32(offset, value) { view.setUint32(offset, clamp(value, 0, 4294967295), true); }
   function setI32(offset, value) { view.setInt32(offset, clamp(value, -2147483648, 2147483647), true); }
   function setF32(offset, value) {
     value = Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -515,10 +584,17 @@
       "saveDirect", "saveNative", "download", "applyMoney", "applyCards", "applyItems", "applyStatusCredit", "clearComputers",
       "applyStocks", "buyAllFloatStocks", "clearComputerStocks", "raiseStockPrices", "applyStockMarketBatch", "listUtilityStocks", "syncStockMarket", "applyStockTable",
       "applyRentBatch", "zeroRentBatch", "applyRentTable",
+      "ownAllLand", "repairLandColors", "clearComputerLand", "setAllLandOwner", "setLandPriceBatch", "applyLandTable",
+      "upgradePlayerLandOne", "downgradePlayerLandOne", "maxPlayerLand", "clearPlayerLand",
       "estimatePriceIndex", "capHumanLiquidAssets", "capHumanStockAssets", "priceFriendlyMode", "targetPriceIndexMode",
       "applyDate", "applyPosition", "applyTaskStatus", "clearHumanStatus", "applyCredit", "clearRoadEvents", "bankruptComputers",
-      "fillCardsFromCatalog", "fillCardPoolFromCatalog", "clearHumanCards", "fillItemsFromCatalog", "clearHumanItems", "clearComputerInventoryFromCatalog"
+      "fillCardsFromCatalog", "applyCardCycle", "fillCardPoolFromCatalog", "clearHumanCards", "fillItemsFromCatalog", "clearHumanItems", "clearComputerInventoryFromCatalog"
     ].forEach(id => { $(id).disabled = !enabled; });
+    if (!activeLandMap) {
+      ["ownAllLand", "repairLandColors", "clearComputerLand", "setAllLandOwner", "setLandPriceBatch", "applyLandTable",
+        "upgradePlayerLandOne", "downgradePlayerLandOne", "maxPlayerLand", "clearPlayerLand"]
+        .forEach(id => { $(id).disabled = true; });
+    }
     $("saveDirect").disabled = !enabled || !fileHandle || !fileHandle.createWritable;
   }
 
@@ -545,6 +621,7 @@
     inferHumanSlot();
     inferStockCount();
     captureStockFloatTotals();
+    inferLandMapProfile();
     loadCurrentPositionInputs();
     loadCurrentStatusInputs();
     renderPlayers();
@@ -581,6 +658,7 @@
       if (readPlayer(i).control === 1) {
         $("humanSlot").value = String(i);
         $("computerStart").value = String(Math.min(i + 1, PLAYER_COUNT - 1));
+        $("estatePlayerTarget").value = String(i + 1);
         return;
       }
     }
@@ -707,6 +785,30 @@
   function fillHumanCards() {
     setPlayerCards(humanSlot(), fullHand);
     dirty = true;
+  }
+  function selectedCardCycleIds() {
+    return Array.from(document.querySelectorAll('#cardCycleChoices input[data-card-cycle-id]:checked'))
+      .map(input => Number(input.dataset.cardCycleId))
+      .filter(id => cards.some(([cardId]) => cardId === id));
+  }
+  function setCardCycleSelection(cardIds) {
+    const selected = new Set(cardIds.map(Number));
+    document.querySelectorAll('#cardCycleChoices input[data-card-cycle-id]').forEach(input => {
+      input.checked = selected.has(Number(input.dataset.cardCycleId));
+    });
+  }
+  function applySelectedCardCycle() {
+    const selected = selectedCardCycleIds();
+    if (!selected.length) {
+      $("cardCycleStatus").textContent = "请至少选择一种卡片。";
+      return false;
+    }
+    const hand = Array.from({ length: CARD_SLOTS }, (_, index) => selected[index % selected.length]);
+    setPlayerCards(humanSlot(), hand);
+    dirty = true;
+    const names = selected.map(id => cards.find(([cardId]) => cardId === id)[1]);
+    $("cardCycleStatus").textContent = `已按 ${names.join("、")} 的顺序循环填满 ${CARD_SLOTS} 张卡片。`;
+    return true;
   }
   function clearHumanCardsOnly() {
     setPlayerCards(humanSlot(), []);
@@ -1056,17 +1158,19 @@
       ? plan.targetHumanAssets
       : Math.min(plan.targetHumanAssets, hardHumanAssetCap);
     const ratioStockBudget = Math.floor(allowedHumanAssets * stockRatio);
-    const cashOverflowStockBudget = Math.max(0, allowedHumanAssets - cashCap);
+    const cashBudget = overflowCashToStocks
+      ? Math.min(cashCap, allowedHumanAssets)
+      : Math.min(cashCap, Math.max(0, allowedHumanAssets - ratioStockBudget));
     const stockBudget = overflowCashToStocks
-      ? Math.max(ratioStockBudget, cashOverflowStockBudget)
+      ? Math.max(0, allowedHumanAssets - cashBudget)
       : ratioStockBudget;
     return {
       stockRatio, cashCap, overflowCashToStocks, hardHumanAssetCap,
-      allowedHumanAssets, stockBudget,
+      allowedHumanAssets, cashBudget, stockBudget,
       overflowTransferred: Math.max(0, stockBudget - ratioStockBudget)
     };
   }
-  function allocateHumanStocksByBudget(stockBudget) {
+  function allocateAllHumanStocksByBudget(stockBudget) {
     const listed = ensureAllStocksListed();
     const human = humanSlot();
     const candidates = [];
@@ -1115,7 +1219,79 @@
     dirty = true;
     renderStockTable();
     $("stockStatus").textContent = `已按资产预算动态分配全部 ${listed.count} 支股票：我方持有 ${heldCount} 支，新上市 ${listed.newlyListed} 支，股票市值约 ${stockValue}。`;
-    return { ...listed, stockValue, heldCount, ownershipRatio };
+    return { ...listed, stockValue, heldCount, ownershipRatio, utilityOnly: false, preservedValueExceeded: false };
+  }
+  function allocateUtilityStocksByBudget(stockBudget) {
+    const human = humanSlot();
+    const count = Math.max(selectedStockCount(), namedStockCount());
+    $("stockCount").value = String(count);
+    const utilityStocks = new Set(UTILITY_NAME_INDEXES.map(findStockByNameIndex).filter(stock => stock >= 0));
+    let preservedStockValue = 0;
+    for (let stock = 0; stock < count; stock++) {
+      if (utilityStocks.has(stock)) continue;
+      preservedStockValue += u16(stockHoldingOffset(stock, human)) * Math.max(0, f32(stockInfoOffset(stock) + 8));
+    }
+    preservedStockValue = Math.round(preservedStockValue);
+    const candidates = [];
+    let newlyListed = 0;
+    for (const nameIndex of UTILITY_NAME_INDEXES) {
+      const stock = findStockByNameIndex(nameIndex);
+      if (stock < 0 || stock >= count) continue;
+      const info = stockInfoOffset(stock);
+      const wasUnlisted = i16(info + 2) < 0 || !(stockFloatTotals[stock] > 0);
+      const price = f32(info + 8) > 0 ? f32(info + 8) : 20;
+      const humanShares = u16(stockHoldingOffset(stock, human));
+      const othersHeld = Math.max(0, totalHeldShares(stock) - humanShares);
+      const total = 32767;
+      stockFloatTotals[stock] = total;
+      setI16(info + 2, 0);
+      if (u16(info + 4) === 0) setU16(info + 4, 1);
+      setF32(info + 8, price);
+      if (!(f32(info + 12) > 0)) setF32(info + 12, price);
+      candidates.push({ stock, info, price, total, shares: 0, maxShares: Math.max(0, total - othersHeld) });
+      if (wasUnlisted) newlyListed++;
+    }
+
+    let remainingBudget = Math.max(0, stockBudget - preservedStockValue);
+    const maxExtraValue = candidates.reduce((sum, item) => sum + (item.maxShares - item.shares) * item.price, 0);
+    const ownershipRatio = maxExtraValue > 0 ? Math.min(1, remainingBudget / maxExtraValue) : 0;
+    for (const item of candidates) {
+      const extra = Math.floor((item.maxShares - item.shares) * ownershipRatio);
+      item.shares += extra;
+      remainingBudget -= extra * item.price;
+    }
+    for (const item of [...candidates].sort((a, b) => a.price - b.price)) {
+      if (item.shares < item.maxShares && item.price <= remainingBudget) {
+        item.shares++;
+        remainingBudget -= item.price;
+      }
+    }
+
+    for (const item of candidates) {
+      setPlayerStock(item.stock, human, item.shares, clamp(Math.round(item.price * item.shares), 0, 2147483647));
+      const floating = Math.max(0, item.total - totalHeldShares(item.stock));
+      setU16(item.info + 18, floating);
+      const currentVolume = u16(item.info + 16);
+      setU16(item.info + 16, floating > 0 ? Math.min(floating, currentVolume || Math.max(1, Math.round(item.total * 0.1))) : 0);
+    }
+    const stockValue = playerStockMarketValue(human);
+    let heldCount = 0;
+    for (let stock = 0; stock < count; stock++) {
+      if (u16(stockHoldingOffset(stock, human)) > 0) heldCount++;
+    }
+    dirty = true;
+    renderStockTable();
+    $("stockStatus").textContent = `其他股票原持仓保持不变，已按预算重算自来水厂、电视公司、电力公司；当前股票市值约 ${stockValue}。`;
+    return {
+      count, newlyListed, stockValue, heldCount, ownershipRatio,
+      utilityOnly: true,
+      preservedValueExceeded: preservedStockValue > stockBudget
+    };
+  }
+  function allocateHumanStocksByBudget(stockBudget) {
+    return $("onlyIncreaseUtilityStocks").checked
+      ? allocateUtilityStocksByBudget(stockBudget)
+      : allocateAllHumanStocksByBudget(stockBudget);
   }
   function capHumanStockAssets() {
     const plan = targetPricePlan();
@@ -1127,8 +1303,7 @@
     const plan = targetPricePlan();
     const limits = friendlyAssetLimits(plan);
     const allocation = allocateHumanStocksByBudget(limits.stockBudget);
-    const desiredHumanCash = Math.max(0, Math.round(limits.allowedHumanAssets - allocation.stockValue));
-    const cash = Math.min(limits.cashCap, desiredHumanCash);
+    const cash = clamp(limits.cashBudget, 0, limits.cashCap);
     setPlayerNumbers(plan.human, { cash, bank: 0 });
     $("cash").value = String(cash);
     $("bank").value = "0";
@@ -1140,7 +1315,9 @@
     const roundingTolerance = Math.max(10, Math.round(limits.allowedHumanAssets * 0.001));
     const stockCapacityLimited = humanAssets + roundingTolerance < limits.allowedHumanAssets;
     let constraintText;
-    if (limits.overflowCashToStocks) {
+    if (allocation.preservedValueExceeded) {
+      constraintText = `已开启“只调整公用事业”，其他股票不会被卖出；原有非公用事业股票市值已经超过本次股票预算，因此实际指数可能高于目标。`;
+    } else if (limits.overflowCashToStocks) {
       constraintText = stockCapacityLimited
         ? `已启用超额现金转股票，但现有股票总流通盘不足以承接全部目标资产，仍缺少约 ${Math.round(limits.allowedHumanAssets - humanAssets)}。`
         : `已启用超额现金转股票，约 ${Math.round(limits.overflowTransferred)} 的现金额度已转入股票，允许实际股票占比突破设置值。`;
@@ -1149,7 +1326,8 @@
     } else {
       constraintText = `目标所需我方资产 ${plan.targetHumanAssets} 在限制范围内。`;
     }
-    $("priceIndexStatus").textContent = `${modeName}完成：目标 ${plan.targetIndex.toFixed(2)}，当前估算 ${estimate.index.toFixed(2)}；我方现金 ${cash}/${limits.cashCap}，股票市值约 ${allocation.stockValue}，实际股票占比 ${(actualStockRatio * 100).toFixed(1)}%/${(limits.stockRatio * 100).toFixed(0)}%，持有 ${allocation.heldCount}/${allocation.count} 支股票。${constraintText} 未修改电脑资产、过路费和原有股价。`;
+    const stockScopeText = allocation.utilityOnly ? "仅调整三家公用事业" : "动态分配全部股票";
+    $("priceIndexStatus").textContent = `${modeName}完成：${stockScopeText}；目标 ${plan.targetIndex.toFixed(2)}，当前估算 ${estimate.index.toFixed(2)}；我方现金 ${cash}/${limits.cashCap}，股票市值约 ${allocation.stockValue}，实际股票占比 ${(actualStockRatio * 100).toFixed(1)}%/${(limits.stockRatio * 100).toFixed(0)}%，持有 ${allocation.heldCount}/${allocation.count} 支股票。${constraintText} 未修改电脑资产、过路费和原有股价。`;
   }
   function applyPriceFriendlyMode() {
     applyConstrainedPriceMode("物价友好模式");
@@ -1187,9 +1365,8 @@
     const human = humanSlot();
     const desiredShares = shareOverride === null ? clamp($("stockShares").value, 0, 32767) : clamp(shareOverride, 0, 32767);
     const manualPrice = Number($("stockPrice").value);
-    const utilityNameIndexes = [134, 132, 131];
     let changed = 0;
-    for (const nameIndex of utilityNameIndexes) {
+    for (const nameIndex of UTILITY_NAME_INDEXES) {
       const stock = findStockByNameIndex(nameIndex);
       if (stock < 0) continue;
       const info = stockInfoOffset(stock);
@@ -1213,7 +1390,7 @@
       changed++;
     }
     if (changed > 0) {
-      const maxIndex = Math.max(...utilityNameIndexes.map(findStockByNameIndex).filter(i => i >= 0)) + 1;
+      const maxIndex = Math.max(...UTILITY_NAME_INDEXES.map(findStockByNameIndex).filter(i => i >= 0)) + 1;
       if (maxIndex > selectedStockCount()) $("stockCount").value = String(Math.min(maxIndex, STOCK_MAX_SAFE));
     }
     dirty = true;
@@ -1283,10 +1460,57 @@
     $("rentStatus").textContent = zero ? `已清零 ${count} 条土地过路费。` : `已批量设置 ${count} 条土地过路费。`;
   }
   function selectedLandCount() {
-    return clamp($("landCount").value, 1, LAND_MAX_SAFE);
+    return activeLandMap ? activeLandMap.count : clamp($("landCount").value, 1, LAND_MAX_SAFE);
   }
   function landOffset(recordIndex) {
     return LAND_TABLE + recordIndex * LAND_RECORD_STRIDE;
+  }
+  function inferLandMapProfile() {
+    const ranked = LAND_MAP_PROFILES.map(profile => {
+      let matches = 0;
+      for (let i = 0; i < profile.count; i++) {
+        if ((u32(landOffset(i) + 4) & 0xFFFF) === profile.houseBase[i]) matches++;
+      }
+      return { profile, matches };
+    }).sort((a, b) => b.matches - a.matches);
+    const best = ranked[0];
+    activeLandMap = best && best.matches >= Math.min(30, Math.floor(best.profile.count * 0.6)) ? best.profile : null;
+    $("landMapName").value = activeLandMap ? `${activeLandMap.name}（匹配 ${best.matches}/${activeLandMap.count}）` : "无法可靠识别";
+    $("landCount").value = activeLandMap ? activeLandMap.count : LAND_MAX_SAFE;
+  }
+  function landOwnerOptions(selected) {
+    const options = [`<option value="0"${selected === 0 ? " selected" : ""}>无人</option>`];
+    for (let owner = 1; owner <= PLAYER_COUNT; owner++) {
+      options.push(`<option value="${owner}"${selected === owner ? " selected" : ""}>玩家 ${owner}</option>`);
+    }
+    return options.join("");
+  }
+  function landVisualVariant(recordIndex) {
+    const offset = landOffset(recordIndex);
+    const level = u32(offset + 4) >>> 16;
+    const buildingType = u16(offset + 8);
+    return buildingType === 0 ? clamp(level + 1, 1, 6) : 7;
+  }
+  function syncLandVisual(recordIndex) {
+    if (!activeLandMap) return false;
+    const cell = activeLandMap.visualCells[recordIndex];
+    if (!Number.isInteger(cell) || cell < 0) return false;
+    const offset = landOffset(recordIndex);
+    const owner = clamp(u16(offset + 10), 0, PLAYER_COUNT);
+    const tileOffset = LAND_MAP_LAYER + cell * 2;
+    const variant = landVisualVariant(recordIndex);
+    const currentTile = u16(tileOffset);
+    if (owner === 0 && variant === 1 && currentTile === 230) return false;
+    const tile = owner * 7 + variant;
+    if (currentTile === tile) return false;
+    setU16(tileOffset, tile);
+    return true;
+  }
+  function syncAllLandVisuals() {
+    if (!activeLandMap) return 0;
+    let changed = 0;
+    for (let i = 0; i < activeLandMap.count; i++) changed += syncLandVisual(i) ? 1 : 0;
+    return changed;
   }
   function renderLandTable() {
     if (!bytes) return;
@@ -1294,42 +1518,73 @@
     const rows = [];
     for (let i = 0; i < count; i++) {
       const offset = landOffset(i);
+      const houseState = u32(offset + 4);
+      const baseHousePrice = houseState & 0xFFFF;
+      const level = houseState >>> 16;
+      const owner = u16(offset + 10);
+      const editable = Boolean(activeLandMap && activeLandMap.visualCells[i] >= 0);
+      const disabled = editable ? "" : " disabled";
       rows.push(`<tr>
         <td>${i + 1}</td>
-        <td><input class="stock-cost" data-land="${i}" data-field="price" type="number" value="${i32(offset)}" disabled></td>
-        <td><input class="stock-cost" data-land="${i}" data-field="housePrice" type="number" value="${i32(offset + 4)}" disabled></td>
-        <td><input class="stock-small" data-land="${i}" data-field="unknown" type="number" value="${u16(offset + 8)}" disabled></td>
-        <td><input class="stock-small" data-land="${i}" data-field="owner" type="number" value="${u16(offset + 10)}" disabled></td>
+        <td>${editable ? "普通土地" : "特殊设施（保护）"}</td>
+        <td><input class="stock-cost" data-land="${i}" data-field="price" type="number" min="0" value="${i32(offset)}"${disabled}></td>
+        <td><input class="stock-cost" data-land="${i}" data-field="houseBase" type="number" min="0" max="65535" value="${baseHousePrice}"${disabled}></td>
+        <td><input class="stock-small" data-land="${i}" data-field="level" type="number" min="0" max="5" value="${level}"${disabled}></td>
+        <td><input class="stock-small" data-land="${i}" data-field="buildingType" type="number" min="0" max="65535" value="${u16(offset + 8)}"${disabled}></td>
+        <td><select data-land="${i}" data-field="owner"${disabled}>${landOwnerOptions(owner)}</select></td>
       </tr>`);
     }
     $("landRows").innerHTML = rows.join("");
-    $("landStatus").textContent = `已显示 ${count} 条土地/公司记录。`;
+    const protectedCount = activeLandMap ? activeLandMap.visualCells.filter(cell => cell < 0).length : count;
+    $("landStatus").textContent = activeLandMap
+      ? `已识别${activeLandMap.name}地图：${count - protectedCount} 块普通土地可修改，${protectedCount} 个特殊设施受保护。归属修改会同步地图颜色。`
+      : "无法可靠识别地图，已禁止土地写入，避免颜色错位。";
   }
   function applyLandTableToBytes() {
+    if (!activeLandMap) return;
     const count = selectedLandCount();
+    let changed = 0;
     for (let i = 0; i < count; i++) {
+      if (activeLandMap.visualCells[i] < 0) continue;
       const offset = landOffset(i);
       const get = (field) => document.querySelector(`#landRows input[data-land="${i}"][data-field="${field}"]`).value;
       setI32(offset, get("price"));
-      setI32(offset + 4, get("housePrice"));
-      setU16(offset + 8, get("unknown"));
-      setU16(offset + 10, get("owner"));
+      const baseHousePrice = clamp(get("houseBase"), 0, 65535);
+      const level = clamp(get("level"), 0, 5);
+      setU32(offset + 4, level * 65536 + baseHousePrice);
+      setU16(offset + 8, get("buildingType"));
+      const owner = document.querySelector(`#landRows select[data-land="${i}"][data-field="owner"]`).value;
+      setU16(offset + 10, owner);
+      changed += syncLandVisual(i) ? 1 : 0;
     }
     dirty = true;
-    $("landStatus").textContent = `已应用 ${count} 条土地/公司表格。`;
+    renderLandTable();
+    $("landStatus").textContent = `已应用土地表格，并同步更新 ${changed} 个地图颜色图块。`;
   }
   function setAllLandOwner(owner) {
+    if (!activeLandMap) return;
     const count = selectedLandCount();
-    for (let i = 0; i < count; i++) setU16(landOffset(i) + 10, owner);
+    let changed = 0;
+    let recolored = 0;
+    for (let i = 0; i < count; i++) {
+      if (activeLandMap.visualCells[i] < 0) continue;
+      const offset = landOffset(i) + 10;
+      if (u16(offset) !== owner) changed++;
+      setU16(offset, owner);
+      recolored += syncLandVisual(i) ? 1 : 0;
+    }
     dirty = true;
     renderLandTable();
-    $("landStatus").textContent = owner === 0 ? `已将 ${count} 条记录设为无人拥有。` : `已将 ${count} 条记录归给第 ${owner} 位玩家。`;
+    $("landStatus").textContent = owner === 0
+      ? `已清空 ${changed} 块普通土地的归属，并同步 ${recolored} 个地图颜色图块。`
+      : `已将 ${changed} 块普通土地归给玩家 ${owner}，并同步 ${recolored} 个地图颜色图块。`;
   }
   function ownAllLandByHuman() {
     const humanOwner = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1) + 1;
     setAllLandOwner(humanOwner);
   }
   function clearComputerOwnedLand() {
+    if (!activeLandMap) return;
     const start = clamp($("computerStart").value, 0, PLAYER_COUNT - 1);
     const total = clamp($("computerCount").value, 0, PLAYER_COUNT);
     const humanOwner = clamp($("humanSlot").value, 0, PLAYER_COUNT - 1) + 1;
@@ -1340,29 +1595,107 @@
     }
     const count = selectedLandCount();
     let changed = 0;
+    let recolored = 0;
     for (let i = 0; i < count; i++) {
+      if (activeLandMap.visualCells[i] < 0) continue;
       const offset = landOffset(i) + 10;
       if (computerOwners.has(u16(offset))) {
         setU16(offset, 0);
         changed++;
+        recolored += syncLandVisual(i) ? 1 : 0;
       }
     }
     dirty = true;
     renderLandTable();
-    $("landStatus").textContent = `已清空电脑拥有的 ${changed} 条土地/公司记录。`;
+    $("landStatus").textContent = `已清空电脑拥有的 ${changed} 块普通土地，并同步 ${recolored} 个地图颜色图块。`;
   }
   function setLandPriceBatch() {
+    if (!activeLandMap) return;
     const count = selectedLandCount();
     const price = clamp($("landPrice").value, 0, 2147483647);
-    const housePrice = clamp($("landHousePrice").value, 0, 2147483647);
+    const housePrice = clamp($("landHousePrice").value, 0, 65535);
     for (let i = 0; i < count; i++) {
+      if (activeLandMap.visualCells[i] < 0) continue;
       const offset = landOffset(i);
       setI32(offset, price);
-      setI32(offset + 4, housePrice);
+      setU32(offset + 4, (u32(offset + 4) & 0xFFFF0000) + housePrice);
     }
     dirty = true;
     renderLandTable();
-    $("landStatus").textContent = `已批量设置 ${count} 条记录的地价和房价。`;
+    $("landStatus").textContent = `已批量设置普通土地的地价和基础房价；房屋等级保持不变。`;
+  }
+  function repairLandColors() {
+    if (!activeLandMap) return;
+    const changed = syncAllLandVisuals();
+    dirty = dirty || changed > 0;
+    renderLandTable();
+    $("landStatus").textContent = `颜色校验完成：已修复 ${changed} 个与土地归属或房屋状态不一致的地图图块。`;
+  }
+  function selectedEstateOwner() {
+    return clamp($("estatePlayerTarget").value, 1, PLAYER_COUNT);
+  }
+  function updatePlayerEstateLevels(mode) {
+    if (!activeLandMap) return;
+    const owner = selectedEstateOwner();
+    let changed = 0;
+    let skipped = 0;
+    let recolored = 0;
+    for (let i = 0; i < activeLandMap.count; i++) {
+      if (activeLandMap.visualCells[i] < 0) continue;
+      const offset = landOffset(i);
+      if (u16(offset + 10) !== owner) continue;
+      const houseState = u32(offset + 4);
+      const baseHousePrice = houseState & 0xFFFF;
+      const oldLevel = houseState >>> 16;
+      const buildingType = u16(offset + 8);
+      let newLevel = oldLevel;
+      let newBuildingType = buildingType;
+      if (mode === "up") {
+        if (buildingType !== 0 || oldLevel >= 5) { skipped++; continue; }
+        newLevel = oldLevel + 1;
+      } else if (mode === "down") {
+        if (oldLevel <= 0 && buildingType === 0) { skipped++; continue; }
+        newLevel = Math.max(0, oldLevel - 1);
+        newBuildingType = 0;
+      } else if (mode === "max") {
+        if (oldLevel === 5 && buildingType === 0) { skipped++; continue; }
+        newLevel = 5;
+        newBuildingType = 0;
+      }
+      const levelDelta = newLevel - oldLevel;
+      setU32(offset + 4, newLevel * 65536 + baseHousePrice);
+      setU16(offset + 8, newBuildingType);
+      setI32(offset, Math.max(0, i32(offset) + levelDelta * baseHousePrice));
+      recolored += syncLandVisual(i) ? 1 : 0;
+      changed++;
+    }
+    dirty = dirty || changed > 0;
+    renderLandTable();
+    const action = mode === "up" ? "升 1 级" : mode === "down" ? "降 1 级" : "升至 5 级";
+    $("landStatus").textContent = `玩家 ${owner} 的 ${changed} 块地产已${action}，同步 ${recolored} 个地图图块；${skipped} 块已到边界或属于特殊建筑。`;
+  }
+  function clearSelectedPlayerLand() {
+    if (!activeLandMap) return;
+    const owner = selectedEstateOwner();
+    let changed = 0;
+    let recolored = 0;
+    for (let i = 0; i < activeLandMap.count; i++) {
+      if (activeLandMap.visualCells[i] < 0) continue;
+      const offset = landOffset(i);
+      if (u16(offset + 10) !== owner) continue;
+      const houseState = u32(offset + 4);
+      const baseHousePrice = houseState & 0xFFFF;
+      const level = houseState >>> 16;
+      setI32(offset, Math.max(0, i32(offset) - level * baseHousePrice));
+      setU32(offset + 4, baseHousePrice);
+      setU16(offset + 8, 0);
+      setU16(offset + 10, 0);
+      recolored += syncLandVisual(i) ? 1 : 0;
+      changed++;
+    }
+    dirty = dirty || changed > 0;
+    renderLandTable();
+    $("landStatus").textContent = `已清空玩家 ${owner} 的 ${changed} 块土地：归属、房屋等级和建筑类型均已移除，并同步 ${recolored} 个地图图块。`;
   }
   function cleanWordText(text) {
     return text.replace(/\0/g, "").replace(/[\x00-\x1F]+/g, "").trim();
@@ -1372,7 +1705,7 @@
     for (const encoding of decoders) {
       try {
         const text = cleanWordText(new TextDecoder(encoding).decode(bytesPart));
-        if (text && !text.includes(" ")) return text;
+        if (text && !text.includes("�")) return text;
       } catch (_) {}
     }
     return "";
@@ -1381,7 +1714,7 @@
     const buffer = await file.arrayBuffer();
     const raw = new Uint8Array(buffer);
     const count = selectedStockCount();
-    const candidateLengths = [12, 10];
+    const candidateLengths = [10, 12];
     let best = {};
     let bestHits = -1;
     for (const recordLength of candidateLengths) {
@@ -1389,7 +1722,7 @@
       let hits = 0;
       for (let stock = 0; stock < count; stock++) {
         const nameIndex = u16(stockInfoOffset(stock));
-        const start = (nameIndex - 1) * recordLength;
+        const start = nameIndex * recordLength;
         if (start < 0 || start + recordLength > raw.length) continue;
         const name = decodeWordRecord(raw.slice(start, start + recordLength));
         if (name) {
@@ -1479,8 +1812,8 @@
     return [
       "humanSlot", "cash", "bank", "coupon", "itemCount", "poolCount", "computerStart", "computerCount",
       "stockCount", "stockShares", "stockPrice", "stockVolume", "stockFloat", "stockDays",
-      "targetPriceIndex", "friendlyCashCap", "friendlyStockRatio", "overflowCashToStocks",
-      "rentCount", "rent0", "rent1", "rent5",
+      "targetPriceIndex", "friendlyCashCap", "friendlyStockRatio", "overflowCashToStocks", "onlyIncreaseUtilityStocks",
+      "landOwnerTarget", "estatePlayerTarget", "landPrice", "landHousePrice", "rentCount", "rent0", "rent1", "rent5",
       "turnPlayer", "year", "month", "day", "posX", "posY", "vehicle", "creditLimit",
       "jailDays", "hospitalDays", "sleepDays", "sleepwalkDays", "godType", "godTurns", "statusPreset"
     ];
@@ -1491,6 +1824,7 @@
       const input = $(id);
       settings[id] = input.type === "checkbox" ? input.checked : input.value;
     }
+    settings.cardCycleIds = selectedCardCycleIds();
     localStorage.setItem(settingsKey, JSON.stringify(settings));
     $("settingsStatus").value = "配置已保存";
     setStatus(`<span class="ok">已保存当前页面配置。</span> 下次打开可点击“读取配置”恢复。`);
@@ -1508,6 +1842,7 @@
       if (input.type === "checkbox") input.checked = Boolean(settings[id]);
       else input.value = settings[id];
     }
+    if (Array.isArray(settings.cardCycleIds)) setCardCycleSelection(settings.cardCycleIds);
     $("settingsStatus").value = "已读取配置";
     if (!silent) setStatus(`<span class="ok">已读取保存的配置。</span>`);
     if (bytes) {
@@ -1612,15 +1947,35 @@
   $("stockCount").addEventListener("change", () => renderStockTable());
   $("estimatePriceIndex").addEventListener("click", showEstimatedPriceIndex);
   $("capHumanLiquidAssets").addEventListener("click", () => { capHumanLiquidAssets(); afterChange("已限制我方现金和存款，用于降低物价指数。"); });
-  $("capHumanStockAssets").addEventListener("click", () => { capHumanStockAssets(); afterChange("已按目标指数预算动态重算我方全部股票持仓。"); });
+  $("capHumanStockAssets").addEventListener("click", () => { capHumanStockAssets(); afterChange("已按目标指数预算和当前股票范围设置重算持仓。"); });
   $("priceFriendlyMode").addEventListener("click", () => { applyPriceFriendlyMode(); afterChange("已应用物价友好模式。"); });
   $("targetPriceIndexMode").addEventListener("click", () => { applyTargetPriceIndexMode(); afterChange("已按目标物价指数反算我方资产。"); });
   $("applyRentBatch").addEventListener("click", () => { setRentBatch(false); afterChange("已批量设置土地过路费。"); });
   $("zeroRentBatch").addEventListener("click", () => { setRentBatch(true); afterChange("已清零土地过路费。"); });
   $("applyRentTable").addEventListener("click", () => { applyRentTableToBytes(); afterChange("已应用土地过路费表格。"); });
   $("rentCount").addEventListener("change", () => renderRentTable());
-  $("landCount").addEventListener("change", () => renderLandTable());
+  $("ownAllLand").addEventListener("click", () => { ownAllLandByHuman(); afterChange("已将全部普通土地归我，并同步地图颜色。"); });
+  $("repairLandColors").addEventListener("click", () => { repairLandColors(); afterChange("已校验并修复现有土地颜色。"); });
+  $("clearComputerLand").addEventListener("click", () => { clearComputerOwnedLand(); afterChange("已清空电脑土地，并同步地图颜色。"); });
+  $("setAllLandOwner").addEventListener("click", () => { setAllLandOwner(clamp($("landOwnerTarget").value, 0, PLAYER_COUNT)); afterChange("已批量设置土地所有者，并同步地图颜色。"); });
+  $("setLandPriceBatch").addEventListener("click", () => { setLandPriceBatch(); afterChange("已批量设置普通土地价格。"); });
+  $("applyLandTable").addEventListener("click", () => { applyLandTableToBytes(); afterChange("已应用土地表格，并同步地图颜色。"); });
+  $("upgradePlayerLandOne").addEventListener("click", () => { updatePlayerEstateLevels("up"); afterChange("已将指定玩家可升级的地产全部升 1 级。"); });
+  $("downgradePlayerLandOne").addEventListener("click", () => { updatePlayerEstateLevels("down"); afterChange("已将指定玩家可降级的地产全部降 1 级。"); });
+  $("maxPlayerLand").addEventListener("click", () => { updatePlayerEstateLevels("max"); afterChange("已将指定玩家的普通地产直接升满。"); });
+  $("clearPlayerLand").addEventListener("click", () => { clearSelectedPlayerLand(); afterChange("已清空指定玩家的土地和地产。"); });
   $("fillCardsFromCatalog").addEventListener("click", () => { fillHumanCards(); afterChange("已按强卡组合补满我方卡片。"); });
+  $("applyCardCycle").addEventListener("click", () => {
+    if (applySelectedCardCycle()) afterChange("已按自选卡片循环填满我方 15 个卡片槽。");
+  });
+  $("selectAllCardCycle").addEventListener("click", () => {
+    setCardCycleSelection(cards.map(([id]) => id));
+    $("cardCycleStatus").textContent = "已选择全部卡片；应用后会按编号顺序循环填满 15 张。";
+  });
+  $("clearCardCycleSelection").addEventListener("click", () => {
+    setCardCycleSelection([]);
+    $("cardCycleStatus").textContent = "已清空选择，请至少重新勾选一种卡片。";
+  });
   $("fillCardPoolFromCatalog").addEventListener("click", () => { refillCardPool(); dirty = true; afterChange("已补满全局卡片池。"); });
   $("clearHumanCards").addEventListener("click", () => { clearHumanCardsOnly(); afterChange("已清空我方卡片。"); });
   $("fillItemsFromCatalog").addEventListener("click", () => { fillHumanItems(); afterChange("已补满我方道具。"); });
@@ -1657,6 +2012,7 @@
 
   fillSelects();
   renderCatalog();
+  renderCardCycleChoices();
   loadSavedSettings(true);
 })();
 </script>
