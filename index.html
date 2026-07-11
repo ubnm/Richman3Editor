@@ -255,7 +255,7 @@
       <button id="raiseStockPrices" disabled>设置上市股价</button>
       <button id="applyStockMarketBatch" disabled>批量设置现量/上市</button>
       <button id="listUtilityStocks" disabled>公用事业持股至上限</button>
-      <button id="syncStockMarket" disabled>按持股同步现量</button>
+      <button id="syncStockMarket" disabled>同步现量 / 经营权</button>
       <button id="applyStockTable" class="primary" disabled>应用表格修改</button>
     </div>
     <div id="stockStatus" class="status">载入存档后会自动识别有效股票数量。当前这份存档通常是 16 支。</div>
@@ -265,7 +265,7 @@
       <table class="stock-table">
         <thead>
           <tr>
-            <th>#</th><th>类别</th><th>股票名称</th><th>名称索引</th><th>剩余天</th><th>承销</th><th>今日价</th><th>昨日价</th><th>现量</th><th>流通量</th>
+            <th>#</th><th>类别</th><th>股票名称</th><th>经营者</th><th>名称索引</th><th>剩余天</th><th>承销</th><th>今日价</th><th>昨日价</th><th>现量</th><th>流通量</th>
           </tr>
         </thead>
         <tbody id="stockMarketRows"></tbody>
@@ -434,6 +434,9 @@
   const STOCK_INFO = 0x2D80;
   const STOCK_INFO_STRIDE = 46;
   const STOCK_MAX_SAFE = 22;
+  const COMPANY_INFO = 0x26E6;
+  const COMPANY_INFO_STRIDE = 18;
+  const COMPANY_MANAGER_OFFSET = 16;
   const HEADER_CURRENT_PLAYER = 0x0000;
   const HEADER_YEAR = 0x0004;
   const HEADER_MONTH = 0x0006;
@@ -496,6 +499,10 @@
   const UTILITY_SHARE_CAP = 10000;
   const MAP_COMPANY_NAME_INDEXES = [133, 434, 136, 132, 131, 138, 134];
   const PURE_MARKET_NAME_INDEXES = [433, 459, 435, 436, 439, 437];
+  const COMPANY_INDEX_BY_NAME = {
+    132: 1, 136: 2, 133: 3, 137: 4, 134: 5,
+    434: 6, 138: 7, 131: 8, 139: 9, 140: 10
+  };
   const godTypes = [
     [0x00, "00h - 无"],
     [0x08, "08h - 财神"],
@@ -864,6 +871,7 @@
     return STOCK_HOLDINGS + stockIndex * STOCK_HOLDING_STRIDE + playerSlot * STOCK_PLAYER_STRIDE;
   }
   function stockInfoOffset(stockIndex) { return STOCK_INFO + stockIndex * STOCK_INFO_STRIDE; }
+  function companyInfoOffset(companyIndex) { return COMPANY_INFO + (companyIndex - 1) * COMPANY_INFO_STRIDE; }
   function i16(offset) { return view.getInt16(offset, true); }
   function setI16(offset, value) { view.setInt16(offset, clamp(value, -32768, 32767), true); }
   function stockDisplayName(nameIndex, stockIndex) {
@@ -884,6 +892,19 @@
   function stockCategoryTag(category) {
     return `<span class="category-tag category-${category.key}">${category.label}</span>`;
   }
+  function companyManagerForStock(stockIndex) {
+    const nameIndex = u16(stockInfoOffset(stockIndex));
+    const companyIndex = COMPANY_INDEX_BY_NAME[nameIndex] || 0;
+    if (companyIndex < 1 || companyIndex > 32) return 0;
+    return u16(companyInfoOffset(companyIndex) + COMPANY_MANAGER_OFFSET);
+  }
+  function companyManagerLabel(stockIndex) {
+    const nameIndex = u16(stockInfoOffset(stockIndex));
+    const companyIndex = COMPANY_INDEX_BY_NAME[nameIndex] || 0;
+    if (companyIndex === 0) return "—";
+    const manager = companyManagerForStock(stockIndex);
+    return manager >= 1 && manager <= PLAYER_COUNT ? `玩家 ${manager}` : "暂无";
+  }
   function readStock(stockIndex) {
     const offset = stockInfoOffset(stockIndex);
     const row = {
@@ -903,6 +924,7 @@
     }
     row.name = stockDisplayName(row.nameIndex, stockIndex);
     row.category = stockCategory(row.nameIndex);
+    row.managerLabel = companyManagerLabel(stockIndex);
     return row;
   }
   function renderStockTable() {
@@ -920,6 +942,7 @@
         <td>${s + 1}</td>
         <td>${stockCategoryTag(stock.category)}</td>
         <td><input class="stock-name" data-stock="${s}" data-field="name" value="${stock.name}"></td>
+        <td>${stock.managerLabel}</td>
         <td><input class="stock-small" data-stock="${s}" data-field="nameIndex" type="number" min="0" max="65535" value="${stock.nameIndex}"></td>
         <td><input class="stock-small" data-stock="${s}" data-field="days" type="number" min="-1" max="9999" value="${stock.days}"></td>
         <td><input class="stock-small" data-stock="${s}" data-field="underwritingIndex" type="number" min="0" max="65535" value="${stock.underwritingIndex}"></td>
@@ -969,6 +992,40 @@
     let held = 0;
     for (let p = 0; p < PLAYER_COUNT; p++) held += u16(stockHoldingOffset(stock, p));
     return held;
+  }
+  function syncCompanyManagersFromHoldings() {
+    const count = Math.max(selectedStockCount(), namedStockCount());
+    let changed = 0;
+    for (let stock = 0; stock < count; stock++) {
+      const info = stockInfoOffset(stock);
+      const nameIndex = u16(info);
+      const expectedCompanyIndex = COMPANY_INDEX_BY_NAME[nameIndex];
+      if (expectedCompanyIndex !== undefined && u16(info + 4) !== expectedCompanyIndex) {
+        setU16(info + 4, expectedCompanyIndex);
+        changed++;
+      } else if (PURE_MARKET_NAME_INDEXES.includes(nameIndex) && u16(info + 4) !== 0) {
+        setU16(info + 4, 0);
+        changed++;
+      }
+      const companyIndex = expectedCompanyIndex || 0;
+      if (companyIndex < 1 || companyIndex > 32) continue;
+      const managerOffset = companyInfoOffset(companyIndex) + COMPANY_MANAGER_OFFSET;
+      const currentManager = u16(managerOffset);
+      const shares = Array.from({ length: PLAYER_COUNT }, (_, player) => u16(stockHoldingOffset(stock, player)));
+      const maximum = Math.max(...shares);
+      let manager = 0;
+      if (maximum > 0) {
+        const currentSlot = currentManager - 1;
+        manager = currentSlot >= 0 && currentSlot < PLAYER_COUNT && shares[currentSlot] === maximum
+          ? currentManager
+          : shares.indexOf(maximum) + 1;
+      }
+      if (manager !== currentManager) {
+        setU16(managerOffset, manager);
+        changed++;
+      }
+    }
+    return changed;
   }
   function isUtilityStock(stock) {
     return UTILITY_NAME_INDEXES.includes(u16(stockInfoOffset(stock)));
@@ -1062,8 +1119,9 @@
       setU16(info + 16, Math.min(u16(info + 16), floating));
     }
     enforceAllUtilitiesUnlisted();
+    const managerChanges = syncCompanyManagersFromHoldings();
     renderStockTable();
-    $("stockStatus").textContent = `已按玩家持股同步其他股票；三家公用事业已强制保持非上市、现量 0、流通量 0。`;
+    $("stockStatus").textContent = `已按玩家持股同步股票市场及 ${managerChanges} 家公司的经营者；三家公用事业保持非上市。`;
   }
   function setPlayerStock(stockIndex, playerSlot, shares, cost) {
     const offset = stockHoldingOffset(stockIndex, playerSlot);
@@ -1103,7 +1161,6 @@
         : Math.max(totalHeldShares(stock), medianTotal, 5000));
       stockFloatTotals[stock] = total;
       setI16(info + 2, 0);
-      if (u16(info + 4) === 0) setU16(info + 4, 1);
       setF32(info + 8, price);
       if (!(f32(info + 12) > 0)) setF32(info + 12, price);
       const floating = Math.max(0, total - totalHeldShares(stock));
@@ -1139,6 +1196,7 @@
       setU16(info + 16, Math.min(u16(info + 16), floating));
     }
     enforceAllUtilitiesUnlisted();
+    syncCompanyManagersFromHoldings();
     dirty = true;
     $("stockStatus").textContent = `已按每支股票真实流通盘设置玩家 ${human + 1} 的持股，并同步成本和流通量。`;
     renderStockTable();
@@ -1163,6 +1221,7 @@
       setU16(info + 16, 0);
     }
     enforceAllUtilitiesUnlisted();
+    syncCompanyManagersFromHoldings();
     dirty = true;
     renderStockTable();
     $("stockStatus").textContent = `已让玩家 ${human + 1} 买光其他上市公司的可流通股（新上市 ${listed.newlyListed} 支）；三家公用事业保持非上市且持股不变。`;
@@ -1316,6 +1375,7 @@
     for (let stock = 0; stock < listed.count; stock++) {
       if (u16(stockHoldingOffset(stock, human)) > 0) heldCount++;
     }
+    syncCompanyManagersFromHoldings();
     dirty = true;
     renderStockTable();
     $("stockStatus").textContent = `已按预算平摊其他上市公司；三家公用事业保持非上市，当前股票市值约 ${stockValue}。`;
@@ -1384,6 +1444,7 @@
       setU16(item.info + 16, floating > 0 ? Math.min(floating, currentVolume || Math.max(1, Math.round(item.total * 0.1))) : 0);
     }
     enforceAllUtilitiesUnlisted();
+    syncCompanyManagersFromHoldings();
     const mapCompanyValue = Math.round(mapCompanies.reduce((sum, item) => sum + item.shares * item.price, 0));
     const pureMarketValue = Math.round(pureMarket.reduce((sum, item) => sum + item.shares * item.price, 0));
     const stockValue = playerStockMarketValue(human);
@@ -1436,6 +1497,7 @@
       setPlayerStock(item.stock, human, item.shares, clamp(Math.round(item.price * item.shares), 0, 2147483647));
       keepUtilityUnlisted(item.stock);
     }
+    syncCompanyManagersFromHoldings();
     return {
       count, ownershipRatio,
       utilityValue: Math.round(candidates.reduce((sum, item) => sum + item.shares * item.price, 0)),
@@ -1523,6 +1585,7 @@
       changed++;
     }
     enforceAllUtilitiesUnlisted();
+    syncCompanyManagersFromHoldings();
     dirty = true;
     $("stockStatus").textContent = `已把 ${changed} 支上市股票的今日价和昨日价设为 ${price}；三家公用事业保持非上市且价格不改。`;
     renderStockTable();
@@ -1566,6 +1629,7 @@
       changed++;
     }
     enforceAllUtilitiesUnlisted();
+    syncCompanyManagersFromHoldings();
     dirty = true;
     $("stockStatus").textContent = `已批量设置 ${changed} 支其他股票；三家公用事业保持非上市、现量 0、流通量 0。`;
     renderStockTable();
