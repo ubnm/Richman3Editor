@@ -47,6 +47,9 @@
       cursor: pointer;
     }
     button.primary, .file-label.primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+    .github-link { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: 0 0 36px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
+    .github-link:hover { border-color: #8c96a3; background: #f7f8fa; }
+    .github-link svg { width: 20px; height: 20px; fill: currentColor; }
     button.warn { border-color: #e2b35f; background: #fff8ea; color: var(--warn); }
     button:disabled { opacity: .48; cursor: not-allowed; }
     input[type="file"] { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
@@ -164,6 +167,9 @@
       <p>离线单文件工具，直接双击本 HTML，选择存档即可使用。</p>
     </div>
     <div class="toolbar">
+      <a class="github-link" href="https://github.com/ubnm/Richman3Editor" target="_blank" rel="noopener noreferrer" aria-label="打开 Richman3Editor GitHub 仓库" title="Richman3Editor · GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.64 0 8.13c0 3.59 2.29 6.64 5.47 7.71.4.08.55-.18.55-.39 0-.19-.01-.83-.01-1.5-2.01.38-2.53-.5-2.69-.96-.09-.23-.48-.96-.82-1.15-.28-.15-.68-.53-.01-.54.63-.01 1.08.59 1.23.83.72 1.23 1.87.88 2.33.67.07-.53.28-.88.51-1.08-1.78-.21-3.64-.91-3.64-4.02 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.5 7.5 0 0 1 8 3.91c.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.12-1.87 3.81-3.65 4.02.29.25.54.74.54 1.51 0 1.09-.01 1.97-.01 2.24 0 .22.15.47.55.39A8.14 8.14 0 0 0 16 8.13C16 3.64 12.42 0 8 0Z"/></svg>
+      </a>
       <label class="file-label primary" for="fileInput">选择存档</label>
       <input id="fileInput" type="file" accept=".sav,.SAV,application/octet-stream">
       <button id="openNative">高级打开</button>
@@ -255,17 +261,17 @@
       <button id="raiseStockPrices" disabled>设置上市股价</button>
       <button id="applyStockMarketBatch" disabled>批量设置现量/上市</button>
       <button id="listUtilityStocks" disabled>公用事业持股至上限</button>
-      <button id="syncStockMarket" disabled>同步现量 / 经营权</button>
+      <button id="syncStockMarket" disabled>修复经营权 / 收费结算</button>
       <button id="applyStockTable" class="primary" disabled>应用表格修改</button>
     </div>
-    <div id="stockStatus" class="status">载入存档后会自动识别有效股票数量。当前这份存档通常是 16 支。</div>
+    <div id="stockStatus" class="status">载入存档后会自动识别有效股票数量。公司收费先进入“累计盈余”，月底才按持股比例分红，不会立刻进入董事长现金。</div>
     <details class="section-gap">
       <summary>展开股票市场信息表</summary>
     <div class="table-wrap">
       <table class="stock-table">
         <thead>
           <tr>
-            <th>#</th><th>类别</th><th>股票名称</th><th>经营者</th><th>名称索引</th><th>剩余天</th><th>承销</th><th>今日价</th><th>昨日价</th><th>现量</th><th>流通量</th>
+            <th>#</th><th>类别</th><th>股票名称</th><th>经营者</th><th>收费公式</th><th>累计盈余</th><th>结算</th><th>名称索引</th><th>剩余天</th><th>承销</th><th>今日价</th><th>昨日价</th><th>现量</th><th>流通量</th>
           </tr>
         </thead>
         <tbody id="stockMarketRows"></tbody>
@@ -436,6 +442,9 @@
   const STOCK_MAX_SAFE = 22;
   const COMPANY_INFO = 0x26E6;
   const COMPANY_INFO_STRIDE = 18;
+  const COMPANY_FEE_METHOD_OFFSET = 2;
+  const COMPANY_FEE_PARAM_OFFSET = 4;
+  const COMPANY_PROFIT_OFFSET = 10;
   const COMPANY_MANAGER_OFFSET = 16;
   const HEADER_CURRENT_PLAYER = 0x0000;
   const HEADER_YEAR = 0x0004;
@@ -502,6 +511,15 @@
   const COMPANY_INDEX_BY_NAME = {
     132: 1, 136: 2, 133: 3, 137: 4, 134: 5,
     434: 6, 138: 7, 131: 8, 139: 9, 140: 10
+  };
+  const COMPANY_FEE_METHODS = {
+    0: (n) => `固定 ${n} 元`,
+    1: (n) => `两颗骰子点数 × ${n}`,
+    2: (n) => `(1 + 骰子点数/10) × ${n}`,
+    3: (n) => `住宿 1-3 天 × ${n}`,
+    4: (n) => `住宿 2 天 × ${n}`,
+    5: (n) => `踩中者土地数 × ${n}`,
+    6: (n) => `踩中者房屋数 × ${n}`
   };
   const godTypes = [
     [0x00, "00h - 无"],
@@ -905,6 +923,23 @@
     const manager = companyManagerForStock(stockIndex);
     return manager >= 1 && manager <= PLAYER_COUNT ? `玩家 ${manager}` : "暂无";
   }
+  function companyDetailsForStock(stockIndex) {
+    const nameIndex = u16(stockInfoOffset(stockIndex));
+    const companyIndex = COMPANY_INDEX_BY_NAME[nameIndex] || 0;
+    if (companyIndex < 1 || companyIndex > 32) {
+      return { companyIndex: 0, feeLabel: "—", profit: null, settlement: "无地图公司" };
+    }
+    const offset = companyInfoOffset(companyIndex);
+    const method = u16(offset + COMPANY_FEE_METHOD_OFFSET);
+    const parameter = u16(offset + COMPANY_FEE_PARAM_OFFSET);
+    const formatter = COMPANY_FEE_METHODS[method];
+    return {
+      companyIndex,
+      feeLabel: formatter ? formatter(parameter) : `方式 ${method}，参数 ${parameter}`,
+      profit: u32(offset + COMPANY_PROFIT_OFFSET),
+      settlement: "月底按持股分红"
+    };
+  }
   function readStock(stockIndex) {
     const offset = stockInfoOffset(stockIndex);
     const row = {
@@ -925,6 +960,7 @@
     row.name = stockDisplayName(row.nameIndex, stockIndex);
     row.category = stockCategory(row.nameIndex);
     row.managerLabel = companyManagerLabel(stockIndex);
+    row.company = companyDetailsForStock(stockIndex);
     return row;
   }
   function renderStockTable() {
@@ -943,6 +979,9 @@
         <td>${stockCategoryTag(stock.category)}</td>
         <td><input class="stock-name" data-stock="${s}" data-field="name" value="${stock.name}"></td>
         <td>${stock.managerLabel}</td>
+        <td>${stock.company.feeLabel}</td>
+        <td>${stock.company.profit === null ? "—" : `<input class="stock-cost" data-stock="${s}" data-field="companyProfit" type="number" min="0" max="4294967295" value="${stock.company.profit}">`}</td>
+        <td>${stock.company.settlement}</td>
         <td><input class="stock-small" data-stock="${s}" data-field="nameIndex" type="number" min="0" max="65535" value="${stock.nameIndex}"></td>
         <td><input class="stock-small" data-stock="${s}" data-field="days" type="number" min="-1" max="9999" value="${stock.days}"></td>
         <td><input class="stock-small" data-stock="${s}" data-field="underwritingIndex" type="number" min="0" max="65535" value="${stock.underwritingIndex}"></td>
@@ -1087,6 +1126,13 @@
       setF32(offset + 12, get("priceYesterday"));
       setU16(offset + 16, get("volume"));
       setU16(offset + 18, get("floating"));
+      const profitInput = document.querySelector(`#stockMarketRows input[data-stock="${stock}"][data-field="companyProfit"]`);
+      if (profitInput) {
+        const companyIndex = COMPANY_INDEX_BY_NAME[get("nameIndex")] || 0;
+        if (companyIndex >= 1 && companyIndex <= 32) {
+          setU32(companyInfoOffset(companyIndex) + COMPANY_PROFIT_OFFSET, profitInput.value);
+        }
+      }
       for (let p = 0; p < PLAYER_COUNT; p++) {
         const hold = stockHoldingOffset(stock, p);
         const shares = document.querySelector(`#stockHoldingRows input[data-stock="${stock}"][data-player="${p}"][data-field="shares"]`).value;
@@ -1121,7 +1167,7 @@
     enforceAllUtilitiesUnlisted();
     const managerChanges = syncCompanyManagersFromHoldings();
     renderStockTable();
-    $("stockStatus").textContent = `已按玩家持股同步股票市场及 ${managerChanges} 家公司的经营者；三家公用事业保持非上市。`;
+    $("stockStatus").textContent = `已按持股修复股票市场及 ${managerChanges} 个公司字段；三家公用事业保持非上市。公司收费会进入累计盈余，月底才按持股比例分红。电力/电视按踩中者房屋数收费，自来水按踩中者土地数收费，基数为 0 时不会扣款。`;
   }
   function setPlayerStock(stockIndex, playerSlot, shares, cost) {
     const offset = stockHoldingOffset(stockIndex, playerSlot);
@@ -2086,6 +2132,7 @@
 
   async function saveOverwrite() {
     if (!bytes) return;
+    prepareBytesForSave();
     if (window.showSaveFilePicker) {
       try {
         const handle = await window.showSaveFilePicker({
@@ -2113,6 +2160,7 @@
 
   async function saveDirectOverwrite() {
     if (!bytes) return;
+    prepareBytesForSave();
     if (!fileHandle || !fileHandle.createWritable) {
       setStatus(`<span class="danger">直接覆盖保存需要使用“高级打开”选择存档。普通“选择存档”只能另存为或下载。</span>`);
       return;
@@ -2132,6 +2180,7 @@
 
   function makeDownloadLink(autoClick) {
     if (!bytes) return;
+    prepareBytesForSave();
     clearDownloadLink();
     const blob = new Blob([bytes], { type: "application/octet-stream" });
     downloadUrl = URL.createObjectURL(blob);
@@ -2144,6 +2193,11 @@
   function downloadFile() {
     makeDownloadLink(true);
     setStatus(`<span class="ok">已生成下载链接。</span> 如果没有自动下载，请点击下方链接。替换原存档时把文件名改回原文件名。`);
+  }
+
+  function prepareBytesForSave() {
+    enforceAllUtilitiesUnlisted();
+    syncCompanyManagersFromHoldings();
   }
 
   $("openNative").addEventListener("click", () => openWithPicker().catch(err => setStatus(`<span class="danger">${err.message}</span>`)));
